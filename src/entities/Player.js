@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYER, COLOR_KEYS, COLORS, YELLOW, GREEN } from '../config.js';
+import { PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION } from '../config.js';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
@@ -16,9 +16,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.maxHP = PLAYER.baseHP;
     this.hp = this.maxHP;
 
-    // Cargo: { red: { current, cap }, ... }
+    // Cargo bars are EVOLUTION GAUGES. When `current` reaches `cap` for a
+    // color, a growth event fires and the gauge resets.
     this.cargo = {};
-    for (const k of COLOR_KEYS) this.cargo[k] = { current: 0, cap: PLAYER.baseCargo };
+    for (const k of COLOR_KEYS) this.cargo[k] = { current: 0, cap: EVOLUTION.baseThreshold };
+
+    // How many evolutions have been triggered for each color (drives the next
+    // threshold and the value of newly-spawned parts).
+    this.evolutions = { red: 0, blue: 0, green: 0, yellow: 0 };
+
+    // Soft steering: when set, mining this color fills its gauge faster.
+    this.preferredColor = null;
 
     // Snake-trail history. Each sample: { x, y, t }
     this.history = [];
@@ -33,6 +41,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Last movement direction (used by dash if no input held).
     this.lastDir = new Phaser.Math.Vector2(1, 0);
 
+    // Evolution halo (visible when any gauge is near full).
+    this.halo = scene.add.image(x, y, 'ring')
+      .setDisplaySize(PLAYER.radius * 3.4, PLAYER.radius * 3.4)
+      .setDepth(-1)
+      .setAlpha(0);
+
     // Dash / base weapon timers.
     this.dashUntil = 0;
     this.dashReadyAt = 0;
@@ -46,45 +60,93 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       S: Phaser.Input.Keyboard.KeyCodes.S,
       D: Phaser.Input.Keyboard.KeyCodes.D,
       SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      ONE: Phaser.Input.Keyboard.KeyCodes.ONE,
+      TWO: Phaser.Input.Keyboard.KeyCodes.TWO,
+      THREE: Phaser.Input.Keyboard.KeyCodes.THREE,
+      FOUR: Phaser.Input.Keyboard.KeyCodes.FOUR,
     });
-  }
-
-  recomputeStats() {
-    // Cargo cap from yellow parts
-    let yellowBonus = 0;
-    let greenBonus = 0;
-    for (const p of this.parts) {
-      if (p.color === 'yellow') yellowBonus += p.value * YELLOW.cargoBonusPerValue;
-      else if (p.color === 'green') greenBonus += p.value * GREEN.speedBonusPerValue;
-    }
-    const newCap = PLAYER.baseCargo + yellowBonus;
-    for (const k of COLOR_KEYS) {
-      this.cargo[k].cap = newCap;
-      if (this.cargo[k].current > newCap) this.cargo[k].current = newCap;
-    }
-    this.speedMultiplier = 1 + greenBonus;
+    // Map keys to color names in canonical UI order (matches HUD bars).
+    this.preferKeyMap = [
+      ['ONE',   'red'],
+      ['TWO',   'green'],
+      ['THREE', 'blue'],
+      ['FOUR',  'yellow'],
+    ];
   }
 
   /**
-   * Try to add minerals; clamped by cap. Returns the amount actually added.
+   * Number of attached body parts of a given primary color. Hybrid parts are
+   * NOT counted toward any single primary color for upgrade decisions.
+   */
+  partsOfColor(color) {
+    let n = 0;
+    for (const p of this.parts) if (p.color === color) n++;
+    return n;
+  }
+
+  recomputeStats() {
+    let greenBonus = 0;
+    let yellowCount = 0;
+    for (const p of this.parts) {
+      if (p.color === 'green') greenBonus += p.value * GREEN.speedBonusPerValue;
+      else if (p.color === 'yellow') yellowCount++;
+      // Hybrid bonus contributions:
+      else if (p.kind === 'rapid') greenBonus += p.value * GREEN.speedBonusPerValue * 0.3;
+    }
+    this.speedMultiplier = 1 + greenBonus;
+
+    const reduction = Math.min(
+      EVOLUTION.yellowReductionCap,
+      yellowCount * EVOLUTION.yellowThresholdReduction
+    );
+
+    // Threshold per color depends on how many evolutions have already happened
+    // for that color (each one makes the next cost more), reduced by yellow.
+    for (const color of COLOR_KEYS) {
+      const evos = this.evolutions[color] || 0;
+      const base = EVOLUTION.baseThreshold + EVOLUTION.thresholdPerEvolution * evos;
+      this.cargo[color].cap = base * (1 - reduction);
+    }
+  }
+
+  /**
+   * Pump minerals into the matching gauge. If the gauge tops up, fires an
+   * evolution event via the GameScene and resets the gauge (carrying overflow).
+   * Always returns `amount` so deposits drain at a constant rate regardless of
+   * the gauge state.
    */
   addMinerals(color, amount) {
     const c = this.cargo[color];
     if (!c) return 0;
-    const room = c.cap - c.current;
-    const give = Math.max(0, Math.min(room, amount));
-    c.current += give;
-    return give;
+    if (!this.speedMultiplier) this.recomputeStats();
+
+    const effective = this.preferredColor === color
+      ? amount * EVOLUTION.preferredMineMultiplier
+      : amount;
+    c.current += effective;
+
+    if (c.current >= c.cap) {
+      const overflow = c.current - c.cap;
+      this.scene.triggerEvolution?.(color);
+      // recomputeStats() inside triggerEvolution updates `cap`; restart gauge.
+      this.cargo[color].current = Math.min(overflow, this.cargo[color].cap * 0.95);
+    }
+    return amount;
   }
 
   /**
-   * Try to spend minerals. Returns true on success.
+   * Directly add to a gauge without triggering preferred multiplier. Used by
+   * booster pickups. Still triggers evolution if the gauge fills.
    */
-  spendMinerals(color, amount) {
+  pumpGauge(color, amount) {
     const c = this.cargo[color];
-    if (!c || c.current < amount) return false;
-    c.current -= amount;
-    return true;
+    if (!c) return;
+    c.current += amount;
+    if (c.current >= c.cap) {
+      const overflow = c.current - c.cap;
+      this.scene.triggerEvolution?.(color);
+      this.cargo[color].current = Math.min(overflow, this.cargo[color].cap * 0.95);
+    }
   }
 
   takeDamage(amount, now) {
@@ -103,6 +165,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   update(time, delta) {
     if (!this.body) return;
     if (!this.speedMultiplier) this.recomputeStats();
+
+    // Steering: 1-4 toggles a "preferred" color (faster gauge fill while mining it).
+    for (const [keyName, color] of this.preferKeyMap) {
+      if (Phaser.Input.Keyboard.JustDown(this.keys[keyName])) {
+        this.preferredColor = (this.preferredColor === color) ? null : color;
+      }
+    }
 
     // --- input -> direction vector ---
     const dir = new Phaser.Math.Vector2(0, 0);
@@ -174,6 +243,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.alpha = 0.5 + 0.5 * Math.sin(time * 0.05);
     } else {
       this.alpha = 1;
+    }
+
+    // Evolution halo: pick the most-filled gauge and pulse if it's near full.
+    if (this.halo) {
+      this.halo.setPosition(this.x, this.y);
+      let bestRatio = 0;
+      let bestColor = null;
+      for (const color of COLOR_KEYS) {
+        const c = this.cargo[color];
+        const r = c.cap > 0 ? c.current / c.cap : 0;
+        if (r > bestRatio) { bestRatio = r; bestColor = color; }
+      }
+      if (bestRatio >= EVOLUTION.haloThreshold && bestColor) {
+        const t = (bestRatio - EVOLUTION.haloThreshold) / (1 - EVOLUTION.haloThreshold);
+        const alpha = 0.18 + 0.32 * Math.sin(time * 0.012) * t + 0.25 * t;
+        this.halo.setAlpha(Math.max(0, Math.min(0.7, alpha)));
+        this.halo.setTint(COLORS[bestColor]);
+      } else {
+        this.halo.setAlpha(0);
+      }
     }
   }
 

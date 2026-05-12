@@ -20,14 +20,15 @@ The biggest weak point right now is "what am I working toward?". Adding any one 
 
 ## 2. Snake / body-part depth
 
-Right now there are only 4 part types and they stack linearly. Lots of room here.
+The growth loop has been overhauled into an evolution system (see §13). Remaining ideas:
 
 - **Tier / rarity on parts** — visual outline, particle aura, big stat jumps. Mining a rarer pickup feels like an event. **M**
-- **More part archetypes**:
-  - **Purple**: shield generator (regenerating HP buffer for adjacent parts). **M**
-  - **Orange**: shotgun / spread bullet. **S**
-  - **Cyan**: chain-lightning that arcs between enemies. **M**
+- **More part archetypes** beyond the three implemented hybrids:
   - **Black**: AoE pulse around the part. **S**
+  - **Chain-lightning** that arcs between enemies. **M**
+  - **Shield emitter** (blue + yellow): regenerating HP buffer for adjacent parts. **M**
+  - **Scattergun** (red + yellow): shotgun spread. **S**
+  - **Treads** (green + yellow): extra speed AND threshold reduction. **S**
   - **Engine** (booster): adds a periodic dash. **S**
 - **Part placement matters** — let the player drag-reorder parts at any time; e.g., front-mounted parts get +damage, rear parts get +HP. **M**
 - **Combos / set bonuses** — e.g., 3 yellow in a row = bonus cargo, alternating blue / red = faster fire. **M**
@@ -132,3 +133,18 @@ If aiming for one short polish session, this is a good order:
 3. **Cargo-full warning + pickup-affordability hint** (S) — clarity
 4. **Dash on Space + base weapon** (S) — combat without parts no longer helpless
 5. **Death recap + persistent best run** (S) — gives the loop closure
+
+## 13. Implemented: Evolution system
+
+Replaces the old buy-from-pickups model. The cargo bars are now **evolution gauges**.
+
+- Mining fills a color's gauge. When it pops, it triggers growth in that color and resets.
+- **Append vs upgrade**: under 3 same-color parts → append a new segment; at 3+, the lowest-value matching part is upgraded (`+value`, refreshes size/HP/weapon stats, plays a grow tween).
+- **Soft steering** (`1`-`4`): toggles a "preferred" color. Mining the preferred color fills its gauge ~1.5x faster, and a dot lights up in the HUD.
+- **Threshold ramp**: each evolution makes the next one cost more for that color. Yellow parts globally reduce thresholds by 4% each (capped at 45%).
+- **Hybrid evolutions**: if a partner gauge is at 80% or more when one fills, both are drained and a hybrid part spawns:
+  - **plasma** (blue + red): slow, very-high-damage single shot, long range
+  - **swarm** (green + red): rapid small homing missiles with light AoE
+  - **rapid** (blue + green): very high fire-rate weak bullets
+- **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
+- **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.

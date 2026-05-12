@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
-import { COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER } from '../config.js';
+import {
+  COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
+  EVOLUTION, HYBRIDS, HYBRID_STATS,
+} from '../config.js';
 import { Player } from '../entities/Player.js';
 import { BodyPart } from '../entities/BodyPart.js';
 import { MineralDeposit } from '../entities/MineralDeposit.js';
@@ -206,6 +209,157 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  // --- Hybrid weapon spawners ---
+
+  spawnPlasma(x, y, angle, damage, partValue = 1) {
+    const b = new Bullet(this, x, y, angle, damage, true);
+    const s = HYBRID_STATS.plasma;
+    b.setDisplaySize(8 * s.bulletScale, 8 * s.bulletScale);
+    b.setTint(0xd58aff);
+    // Override speed and lifetime to plasma's slower, longer-lived feel.
+    const vx = Math.cos(angle) * s.bulletSpeed;
+    const vy = Math.sin(angle) * s.bulletSpeed;
+    b.setVelocity(vx, vy);
+    b.lifeUntil = this.time.now + s.lifeMs;
+    this.playerBullets.add(b);
+    return b;
+  }
+
+  spawnRapidBullet(x, y, angle, damage) {
+    const b = new Bullet(this, x, y, angle, damage, true);
+    b.setDisplaySize(5, 5);
+    b.setTint(0xaaffea);
+    this.playerBullets.add(b);
+    return b;
+  }
+
+  spawnSwarmMissile(x, y, angle, damage, partValue, target) {
+    // Small, fast, light AoE missile - just a tinted standard missile.
+    const m = new Missile(this, x, y, angle, damage, Math.max(1, partValue * 0.5), target, true);
+    m.setTint(0xffb56a);
+    m.speed = 320;
+    m.aoe = HYBRID_STATS.swarm.aoeRadius + partValue * HYBRID_STATS.swarm.aoeRadiusPerValue;
+    this.playerMissiles.add(m);
+    return m;
+  }
+
+  // --- Evolution ---
+
+  triggerEvolution(color) {
+    const player = this.player;
+    // Look for a partner gauge sitting at or above hybrid threshold.
+    let partner = null;
+    for (const k of COLOR_KEYS) {
+      if (k === color) continue;
+      const c = player.cargo[k];
+      if (c.cap > 0 && c.current / c.cap >= EVOLUTION.hybridGaugeMin) {
+        partner = k;
+        break;
+      }
+    }
+
+    if (partner && this.hybridFor(color, partner)) {
+      this.spawnHybridEvolution(color, partner);
+    } else {
+      this.spawnEvolution(color);
+    }
+  }
+
+  /** Returns the HYBRIDS entry for the (a,b) pair, or null. */
+  hybridFor(a, b) {
+    const key = [a, b].sort().join('+');
+    return HYBRIDS[key] || null;
+  }
+
+  spawnEvolution(color) {
+    const player = this.player;
+    player.evolutions[color] = (player.evolutions[color] || 0) + 1;
+
+    const sameColorParts = player.parts.filter(p => p.color === color);
+    const appendMode = sameColorParts.length < EVOLUTION.upgradeAtPartCount;
+
+    if (appendMode) {
+      const value = EVOLUTION.baseValue + (player.evolutions[color] - 1) * EVOLUTION.valuePerEvolution;
+      const part = new BodyPart(this, player, player.parts.length, { color, value });
+      player.parts.push(part);
+      this.bodyParts.add(part);
+      this.spawnGrowthFx(player.x, player.y, COLORS[color], 'NEW ' + color.toUpperCase());
+    } else {
+      // Upgrade: pick the lowest-value matching part.
+      sameColorParts.sort((a, b) => a.value - b.value);
+      const target = sameColorParts[0];
+      target.upgradeValue(EVOLUTION.upgradeValueIncrement);
+      this.spawnGrowthFx(target.x, target.y, COLORS[color], 'UPGRADE');
+    }
+
+    player.recomputeStats();
+  }
+
+  spawnHybridEvolution(colorA, colorB) {
+    const player = this.player;
+    const hybrid = this.hybridFor(colorA, colorB);
+    if (!hybrid) {
+      this.spawnEvolution(colorA);
+      return;
+    }
+    // Drain partner gauge fully.
+    player.cargo[colorB].current = 0;
+    player.evolutions[colorA] = (player.evolutions[colorA] || 0) + 1;
+    player.evolutions[colorB] = (player.evolutions[colorB] || 0) + 1;
+
+    const value = EVOLUTION.baseValue + 2;
+    const part = new BodyPart(this, player, player.parts.length, {
+      color: hybrid.kind,
+      kind: hybrid.kind,
+      tint: hybrid.tint,
+      value,
+    });
+    player.parts.push(part);
+    this.bodyParts.add(part);
+
+    this.spawnGrowthFx(player.x, player.y, hybrid.tint, hybrid.label + ' !');
+    this.cameras.main.flash(160, 255, 255, 255, false);
+    player.recomputeStats();
+  }
+
+  /** A big ring + floating label centered on (x,y). `tint` is hex int. */
+  spawnGrowthFx(x, y, tint, label) {
+    const ring = this.add.circle(x, y, 16, 0xffffff, 0);
+    ring.setStrokeStyle(3, tint, 1);
+    ring.setDepth(40);
+    this.tweens.add({
+      targets: ring,
+      scale: 4,
+      alpha: 0,
+      duration: 520,
+      ease: 'Cubic.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+    if (label) {
+      const t = this.add.text(x, y - 24, label, {
+        fontFamily: 'monospace', fontSize: '16px', color: '#ffe28a',
+        stroke: '#000', strokeThickness: 3,
+      }).setOrigin(0.5, 1).setDepth(60);
+      this.tweens.add({
+        targets: t,
+        y: t.y - 36,
+        alpha: 0,
+        duration: 1100,
+        onComplete: () => t.destroy(),
+      });
+    }
+    this.cameras.main.shake(70, 0.0035);
+  }
+
+  spawnBoosterFx(x, y, color) {
+    const ring = this.add.circle(x, y, 8, 0xffffff, 0);
+    ring.setStrokeStyle(2, COLORS[color], 1);
+    this.tweens.add({
+      targets: ring, scale: 4, alpha: 0, duration: 320,
+      onComplete: () => ring.destroy(),
+    });
+  }
+
   spawnExplosion(x, y, radius) {
     const c = this.add.circle(x, y, radius * 0.4, 0xffce80, 0.55);
     const ring = this.add.circle(x, y, 2, 0xffffff, 0.0);
@@ -381,11 +535,10 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    // Pickup purchases + affordability hint refresh
+    // Booster pickups: consume on contact, then respawn elsewhere.
     this.pickups.getChildren().slice().forEach(p => {
       if (!p.active) return;
-      p.refreshAffordability?.(this.player);
-      if (p.tryPurchase(this.player)) {
+      if (p.tryConsume(this.player)) {
         const color = p.color;
         const fromX = p.x, fromY = p.y;
         p.destroyPickup();

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, ENEMY } from '../config.js';
+import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION } from '../config.js';
 
 const formatTime = (ms) => {
   const s = Math.floor(ms / 1000);
@@ -32,7 +32,11 @@ export class UIScene extends Phaser.Scene {
       const lbl = this.add.text(HUD.margin + HUD.barWidth + 8, y - 1, '', {
         fontFamily: 'monospace', fontSize: '12px', color: '#dfe6f2',
       });
-      this.bars[color] = { bg, fill };
+      // "PREFER" indicator: a small dot to the left of each bar that lights up
+      // when this color is the player's preferred one.
+      const dot = this.add.circle(HUD.margin - 8, y + HUD.barHeight / 2, 4, COLORS[color], 0.25)
+        .setStrokeStyle(1, COLORS[color], 0.6);
+      this.bars[color] = { bg, fill, dot };
       this.labels[color] = lbl;
     });
 
@@ -71,9 +75,10 @@ export class UIScene extends Phaser.Scene {
     this.minimap.add([this.minimapBg, this.minimapGfx]);
 
     // --- Tip line ---
-    this.tipText = this.add.text(this.scale.width / 2, HUD.margin, 'WASD / arrows / hold mouse to move    -    Space: dash    -    Esc: pause', {
-      fontFamily: 'monospace', fontSize: '11px', color: '#8693ad',
-    }).setOrigin(0.5, 0);
+    this.tipText = this.add.text(this.scale.width / 2, HUD.margin,
+      'WASD / arrows / hold mouse: move   -   Space: dash   -   1-4: prefer color   -   Esc: pause', {
+        fontFamily: 'monospace', fontSize: '11px', color: '#8693ad',
+      }).setOrigin(0.5, 0);
 
     // --- Pause overlay ---
     this.pauseGroup = this.add.container(0, 0).setVisible(false).setDepth(1000);
@@ -183,27 +188,44 @@ export class UIScene extends Phaser.Scene {
       const c = p.cargo[color];
       const ratio = c.cap > 0 ? Math.max(0, Math.min(1, c.current / c.cap)) : 0;
       this.bars[color].fill.setSize((HUD.barWidth - 2) * ratio, HUD.barHeight - 2);
+      this.bars[color].fill.setFillStyle(COLORS[color]);
 
-      // Cargo-full warning: tint the fill rectangle and pulse the label.
-      const full = c.current >= c.cap - 0.001;
-      if (full) {
-        const pulse = 0.6 + 0.4 * Math.sin(t * 0.012);
-        this.bars[color].fill.setFillStyle(0xffffff);
+      // Imminent-evolution pulse when above halo threshold.
+      if (ratio >= EVOLUTION.haloThreshold) {
+        const pulse = 0.7 + 0.3 * Math.sin(t * 0.012);
         this.bars[color].fill.setAlpha(pulse);
         this.labels[color].setColor('#ffd54a');
-        this.labels[color].setText(`${color.padEnd(6)} ${Math.floor(c.current)} / ${Math.floor(c.cap)}  FULL`);
       } else {
-        this.bars[color].fill.setFillStyle(COLORS[color]);
         this.bars[color].fill.setAlpha(1);
         this.labels[color].setColor('#dfe6f2');
-        this.labels[color].setText(`${color.padEnd(6)} ${Math.floor(c.current)} / ${Math.floor(c.cap)}`);
       }
+
+      // "PREFER" dot
+      if (p.preferredColor === color) {
+        this.bars[color].dot.setFillStyle(COLORS[color], 1);
+        this.bars[color].dot.setStrokeStyle(2, 0xffffff, 0.95);
+      } else {
+        this.bars[color].dot.setFillStyle(COLORS[color], 0.2);
+        this.bars[color].dot.setStrokeStyle(1, COLORS[color], 0.55);
+      }
+
+      // Label: gauge progress + evolution count + threshold.
+      const evos = p.evolutions?.[color] ?? 0;
+      const partsOfColor = p.parts.filter(x => x.color === color).length;
+      const modeTag = partsOfColor >= EVOLUTION.upgradeAtPartCount ? ' UPG' : '';
+      this.labels[color].setText(
+        `${color.padEnd(6)} ${Math.floor(c.current)} / ${Math.floor(c.cap)}   evo ${evos}${modeTag}`
+      );
     }
 
-    const counts = { red: 0, green: 0, blue: 0, yellow: 0 };
-    for (const part of p.parts) counts[part.color]++;
+    // Body part summary including hybrid kinds.
+    const counts = { red: 0, green: 0, blue: 0, yellow: 0, plasma: 0, swarm: 0, rapid: 0 };
+    for (const part of p.parts) counts[part.color] = (counts[part.color] || 0) + 1;
+    const hybridLine = (counts.plasma + counts.swarm + counts.rapid) > 0
+      ? `   hyb  P:${counts.plasma} S:${counts.swarm} Ra:${counts.rapid}`
+      : '';
     this.partsText.setText(
-      `parts  R:${counts.red}  G:${counts.green}  B:${counts.blue}  Y:${counts.yellow}`
+      `parts  R:${counts.red}  G:${counts.green}  B:${counts.blue}  Y:${counts.yellow}${hybridLine}`
     );
   }
 

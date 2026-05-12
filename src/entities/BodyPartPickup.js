@@ -1,7 +1,11 @@
 import Phaser from 'phaser';
 import { COLORS, PICKUP } from '../config.js';
-import { BodyPart } from './BodyPart.js';
 
+/**
+ * Booster pickup (formerly the body-part vendor). Walking next to it grants
+ * an instant gauge boost equal to ~60% of the player's current threshold for
+ * the matching color. No cargo cost. Larger `value` = larger booster.
+ */
 export class BodyPartPickup extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, color, value) {
     super(scene, x, y, 'square');
@@ -27,13 +31,10 @@ export class BodyPartPickup extends Phaser.Physics.Arcade.Sprite {
       repeat: -1,
     });
 
-    // Floating cost label
     this.label = scene.add.text(x, y - this.size / 2 - 12,
-      `${value} ${color}`, {
+      `+${color} boost`, {
         fontFamily: 'monospace', fontSize: '11px', color: '#dfe6f2',
       }).setOrigin(0.5, 1);
-
-    this._affordable = true;
   }
 
   setPosition(x, y) {
@@ -42,40 +43,33 @@ export class BodyPartPickup extends Phaser.Physics.Arcade.Sprite {
     return this;
   }
 
-  /**
-   * Re-color label / sprite based on whether the player can currently afford this.
-   * Called every frame from GameScene.
-   */
-  refreshAffordability(player) {
-    if (!this.label) return;
-    const c = player.cargo[this.color];
-    const can = !!(c && c.current >= this.value);
-    if (can === this._affordable) return;
-    this._affordable = can;
-    // Color the label to signal cost. Sprite keeps its pulse tween.
-    this.label.setColor(can ? '#dfe6f2' : '#ff8090');
-    this.label.setText(can ? `${this.value} ${this.color}` : `${this.value} ${this.color}  -  need more`);
-  }
+  /** Boosters are always usable; this is kept so the scene's pickup loop has
+   *  a uniform interface. */
+  refreshAffordability(_player) { /* no-op now */ }
 
   /**
-   * Check proximity and attempt purchase. Returns true if attached.
+   * If the player is close enough, drain the booster: fill ~60% of their
+   * matching gauge (booster `value` scales this slightly). May trigger an
+   * evolution if the boost overfills.
    */
-  tryPurchase(player) {
+  tryConsume(player) {
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const r = this.size / 2 + player.displayWidth / 2 + PICKUP.pickupRange;
     if (dx * dx + dy * dy > r * r) return false;
-    if (!player.spendMinerals(this.color, this.value)) return false;
 
-    const part = new BodyPart(this.scene, player, player.parts.length, {
-      color: this.color,
-      value: this.value,
-    });
-    player.parts.push(part);
-    this.scene.bodyParts.add(part);
-    player.recomputeStats();
+    const c = player.cargo[this.color];
+    if (!c) return false;
+    // Booster strength: 60% of current threshold + small scale from value.
+    const amount = c.cap * 0.6 + this.value * 0.4;
+    player.pumpGauge(this.color, amount);
+
+    this.scene.spawnBoosterFx?.(this.x, this.y, this.color);
     return true;
   }
+
+  /** Backwards-compatible alias. */
+  tryPurchase(player) { return this.tryConsume(player); }
 
   destroyPickup() {
     if (this.label) this.label.destroy();

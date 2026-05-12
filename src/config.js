@@ -50,11 +50,16 @@ export const PLAYER = {
 };
 
 export const GREEN = {
-  speedBonusPerValue: 0.035,      // +3.5% speed per yellow.value... wait, green
+  speedBonusPerValue: 0.035,      // +3.5% speed per green.value
 };
 
+/**
+ * Yellow's role in the evolution system: each yellow part lowers ALL gauge
+ * thresholds by `yellowThresholdReduction` (capped at `yellowReductionCap`).
+ * The classic +cap behavior is gone; cap is now the evolution threshold.
+ */
 export const YELLOW = {
-  cargoBonusPerValue: 1,          // +1 cap per yellow.value
+  cargoBonusPerValue: 0,          // legacy; no longer used (kept for compat)
 };
 
 export const BLUE = {
@@ -91,6 +96,85 @@ export const BODY_PART = {
   sizePerValue: 2,
   hpBase: 18,
   hpPerValue: 4,
+};
+
+/**
+ * Evolution system: cargo bars are now gauges. When a gauge reaches its
+ * threshold (cargo.cap), it consumes the cargo and triggers growth.
+ *  - First few times you fill a color, a new segment of that color is appended
+ *    to the snake.
+ *  - Past `upgradeAtPartCount` parts of the color, growth instead upgrades the
+ *    weakest matching part.
+ *  - If another color's gauge is at >= `hybridGaugeMin` when one fills, both
+ *    are consumed and a HYBRID part is spawned (recipes in HYBRIDS below).
+ */
+export const EVOLUTION = {
+  baseThreshold: 12,              // first evolution of a color needs this much
+  thresholdPerEvolution: 7,       // each evolution of that color makes the next cost more
+  upgradeAtPartCount: 3,          // past this many same-color parts, upgrades instead
+  upgradeValueIncrement: 2,       // how much value an upgrade adds to the chosen part
+  baseValue: 4,                   // starting `value` of a new evolution part
+  valuePerEvolution: 1,           // +value for each prior evolution of the color
+  hybridGaugeMin: 0.8,            // partner gauge must be at >= 80% to fuse
+  preferredMineMultiplier: 1.5,   // when this color is "preferred" (keys 1-4)
+  yellowThresholdReduction: 0.04, // each yellow part reduces all thresholds by 4%
+  yellowReductionCap: 0.45,       // hard cap at 45% reduction
+  haloThreshold: 0.8,             // visual halo + glow starts at this gauge ratio
+};
+
+/** Behavior kind per primary color (drives BodyPart logic). */
+export const KIND_BY_COLOR = {
+  red: 'missile',
+  blue: 'turret',
+  green: 'speed',
+  yellow: 'cargo',
+};
+
+/**
+ * Hybrid recipes. Keys are alphabetically sorted "a+b". Each defines a unique
+ * behavior `kind` plus visual `tint` and `label`.
+ *
+ *  - plasma (blue+red)   : slow, high-damage single shot (long range)
+ *  - swarm  (green+red)  : rapid small homing missiles
+ *  - rapid  (blue+green) : very high fire-rate weak bullets
+ */
+export const HYBRIDS = {
+  'blue+red':   { kind: 'plasma', tint: 0xb14aff, label: 'PLASMA' },
+  'green+red':  { kind: 'swarm',  tint: 0xff9b3a, label: 'SWARM' },
+  'blue+green': { kind: 'rapid',  tint: 0x4affd9, label: 'RAPID' },
+};
+
+/** Tunables for hybrid weapon behaviors. */
+export const HYBRID_STATS = {
+  plasma: {
+    baseFireRate: 0.45,
+    fireRatePerValue: 0.03,
+    baseRange: 540,
+    rangePerValue: 12,
+    baseDamage: 20,
+    damagePerValue: 2.2,
+    bulletScale: 1.8,
+    bulletSpeed: 460,
+    lifeMs: 1100,
+  },
+  swarm: {
+    baseFireRate: 1.4,
+    fireRatePerValue: 0.06,
+    baseRange: 380,
+    rangePerValue: 10,
+    baseDamage: 6,
+    damagePerValue: 0.9,
+    aoeRadius: 36,
+    aoeRadiusPerValue: 2,
+  },
+  rapid: {
+    baseFireRate: 4.0,
+    fireRatePerValue: 0.18,
+    baseRange: 300,
+    rangePerValue: 8,
+    baseDamage: 2.2,
+    damagePerValue: 0.4,
+  },
 };
 
 export const MINERAL = {

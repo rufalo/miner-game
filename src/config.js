@@ -36,6 +36,17 @@ export const PLAYER = {
   segmentSpacingFrames: 7,        // each body part lags N sample intervals along the path
   // Extra history nodes beyond the worst-case trail length (reduces end-pinching).
   historyHeadroom: 48,
+
+  // Dash (Space).
+  dashSpeed: 720,
+  dashDurationMs: 180,
+  dashCooldownMs: 1600,
+  dashIframeMs: 260,
+
+  // Built-in base pulse weapon so even a chainless player can defend itself.
+  basePulseFireRate: 0.9,         // shots / second
+  basePulseDamage: 4,
+  basePulseRange: 280,
 };
 
 export const GREEN = {
@@ -162,4 +173,16 @@ export const HUD = {
   barWidth: 160,
   barHeight: 14,
   margin: 14,
+};
+
+export const MINIMAP = {
+  size: 200,              // px square
+  margin: 14,
+  background: 0x05060a,
+  border: 0x2a3548,
+  ringColor: 0x2a3548,
+  enemyZoneColor: 0xff5b6d,
+  pickupColor: 0xffd64a,
+  playerColor: 0xffffff,
+  alpha: 0.85,
 };

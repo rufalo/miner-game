@@ -15,6 +15,9 @@ import { Tiers } from '../systems/Tiers.js';
 import { Spawner } from '../systems/Spawner.js';
 import { Targeting } from '../systems/Targeting.js';
 
+// localStorage key for best-run persistence.
+const BEST_RUN_KEY = 'miner-snake:best-run-v1';
+
 export class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
 
@@ -22,6 +25,17 @@ export class GameScene extends Phaser.Scene {
     this.worldCenter = { x: WORLD.size / 2, y: WORLD.size / 2 };
     this.physics.world.setBounds(0, 0, WORLD.size, WORLD.size);
     this.cameras.main.setBounds(0, 0, WORLD.size, WORLD.size);
+
+    // Run stats.
+    this.stats = {
+      startedAt: this.time.now,
+      mineralsMined: 0,
+      kills: 0,
+      maxTier: 0,
+      partsAttached: 0,
+    };
+    this.paused = false;
+    this.deathHandled = false;
 
     this.drawBackground();
 
@@ -151,6 +165,47 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  spawnDashFx(x, y) {
+    const ring = this.add.circle(x, y, 14, 0xffffff, 0);
+    ring.setStrokeStyle(2, 0xa5d8ff, 0.9);
+    ring.setDepth(-5);
+    this.tweens.add({
+      targets: ring,
+      scale: 2.4,
+      alpha: 0,
+      duration: 280,
+      onComplete: () => ring.destroy(),
+    });
+  }
+
+  /**
+   * Floating damage / heal text. `kind`:
+   *   'enemy' (player hurts enemy), 'player' (player took damage), 'heal'.
+   */
+  spawnDamageText(x, y, amount, kind = 'enemy') {
+    if (amount <= 0) return;
+    const color =
+      kind === 'player' ? '#ff7080' :
+      kind === 'heal'   ? '#7bff9e' :
+                          '#ffe28a';
+    const txt = this.add.text(x, y, `${Math.round(amount)}`, {
+      fontFamily: 'monospace',
+      fontSize: kind === 'enemy' ? '14px' : '15px',
+      color,
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5, 1).setDepth(50);
+    const dx = Phaser.Math.Between(-12, 12);
+    this.tweens.add({
+      targets: txt,
+      x: txt.x + dx,
+      y: txt.y - 28,
+      alpha: 0,
+      duration: 650,
+      onComplete: () => txt.destroy(),
+    });
+  }
+
   spawnExplosion(x, y, radius) {
     const c = this.add.circle(x, y, radius * 0.4, 0xffce80, 0.55);
     const ring = this.add.circle(x, y, 2, 0xffffff, 0.0);
@@ -178,18 +233,24 @@ export class GameScene extends Phaser.Scene {
   onBulletHitEnemy(bullet, enemy) {
     if (!bullet.active || !enemy.active) return;
     enemy.takeDamage?.(bullet.damage);
+    this.spawnDamageText(enemy.x, enemy.y - enemy.displayHeight / 2, bullet.damage, 'enemy');
     bullet.destroy();
   }
 
   onBulletHitPlayer(bullet, player) {
     if (!bullet.active) return;
+    const before = player.hp;
     player.takeDamage(bullet.damage, this.time.now);
+    const taken = before - player.hp;
+    if (taken > 0) this.spawnDamageText(player.x, player.y - player.displayHeight / 2, taken, 'player');
     bullet.destroy();
   }
 
   onBulletHitBodyPart(bullet, part) {
     if (!bullet.active || !part.active) return;
-    part.takeDamage?.(bullet.damage * 0.6);
+    const dmg = bullet.damage * 0.6;
+    part.takeDamage?.(dmg);
+    this.spawnDamageText(part.x, part.y - part.displayHeight / 2, dmg, 'player');
     bullet.destroy();
   }
 
@@ -219,6 +280,8 @@ export class GameScene extends Phaser.Scene {
       dropColor, value
     );
 
+    this.stats.kills++;
+
     // Particle puff
     const puff = this.add.circle(enemy.x, enemy.y, 16, 0xffffff, 0.8);
     this.tweens.add({
@@ -227,14 +290,65 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Aggregate run stats including ms-alive and best-run persistence.
+   */
+  buildFinalStats() {
+    const ms = Math.max(0, this.time.now - this.stats.startedAt);
+    return {
+      ...this.stats,
+      msAlive: ms,
+      partsAttached: this.player?.parts?.length ?? this.stats.partsAttached,
+    };
+  }
+
+  loadBestRun() {
+    try {
+      const raw = localStorage.getItem(BEST_RUN_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) { return null; }
+  }
+
+  saveBestRun(current) {
+    const best = this.loadBestRun();
+    // Composite score: minerals + kills*5 + tier*100 + time bonus.
+    const score = (s) =>
+      (s.mineralsMined || 0) + (s.kills || 0) * 5 + (s.maxTier || 0) * 100 +
+      Math.floor((s.msAlive || 0) / 5000);
+    if (!best || score(current) > score(best)) {
+      try { localStorage.setItem(BEST_RUN_KEY, JSON.stringify(current)); } catch (_) {}
+      return true;
+    }
+    return false;
+  }
+
   onPlayerDeath() {
+    if (this.deathHandled) return;
+    this.deathHandled = true;
     this.player.setVelocity(0, 0);
     this.cameras.main.shake(250, 0.02);
     this.player.setTint(0x333333);
+
+    const final = this.buildFinalStats();
+    const isNewBest = this.saveBestRun(final);
+    // UIScene watches scene.scene.get('GameScene').deathPayload to show recap.
+    this.deathPayload = { final, isNewBest, best: this.loadBestRun() };
+  }
+
+  restartGame() {
+    // UIScene keeps running and re-attaches to the new GameScene instance.
+    this.scene.restart();
+  }
+
+  setPaused(paused) {
+    this.paused = !!paused;
+    if (paused) this.physics.world.pause();
+    else this.physics.world.resume();
   }
 
   update(time, delta) {
     if (!this.player.active) return;
+    if (this.paused) return;
     if (this.player.hp <= 0) return; // freeze logic on death
 
     this.player.update(time, delta);
@@ -245,21 +359,32 @@ export class GameScene extends Phaser.Scene {
       parts[i].update(time, delta);
     }
 
+    // Track stat: max tier reached
+    const dist = Math.hypot(this.player.x - this.worldCenter.x, this.player.y - this.worldCenter.y);
+    const tier = this.tiers.tierForDistance(dist);
+    if (tier > this.stats.maxTier) this.stats.maxTier = tier;
+    this.stats.partsAttached = parts.length;
+
     // Mining
     const dtSec = delta / 1000;
     this.minerals.getChildren().slice().forEach(m => {
       if (!m.active) return;
+      const before = m.value;
       if (m.mineTick(this.player, dtSec)) {
+        this.stats.mineralsMined += before; // remaining was fully taken
         const color = m.color;
         const fromX = m.x, fromY = m.y;
         m.destroyDeposit();
         this.spawner.respawnMineral(color, fromX, fromY);
+      } else {
+        this.stats.mineralsMined += Math.max(0, before - m.value);
       }
     });
 
-    // Pickup purchases
+    // Pickup purchases + affordability hint refresh
     this.pickups.getChildren().slice().forEach(p => {
       if (!p.active) return;
+      p.refreshAffordability?.(this.player);
       if (p.tryPurchase(this.player)) {
         const color = p.color;
         const fromX = p.x, fromY = p.y;

@@ -30,6 +30,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Damage feedback / iframes
     this.iframeUntil = 0;
 
+    // Last movement direction (used by dash if no input held).
+    this.lastDir = new Phaser.Math.Vector2(1, 0);
+
+    // Dash / base weapon timers.
+    this.dashUntil = 0;
+    this.dashReadyAt = 0;
+    this.nextBasePulseAt = 0;
+
     // Input
     this.cursors = scene.input.keyboard.createCursorKeys();
     this.keys = scene.input.keyboard.addKeys({
@@ -37,6 +45,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       A: Phaser.Input.Keyboard.KeyCodes.A,
       S: Phaser.Input.Keyboard.KeyCodes.S,
       D: Phaser.Input.Keyboard.KeyCodes.D,
+      SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
     });
   }
 
@@ -112,12 +121,41 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (dir.length() < 6) dir.set(0, 0);
     }
 
-    if (dir.lengthSq() > 0) dir.normalize();
+    if (dir.lengthSq() > 0) {
+      dir.normalize();
+      this.lastDir.copy(dir);
+    }
 
-    const speed = PLAYER.baseSpeed * (this.speedMultiplier || 1);
-    this.setVelocity(dir.x * speed, dir.y * speed);
+    // Dash on Space (uses lastDir if no current input).
+    const spaceJustPressed = Phaser.Input.Keyboard.JustDown(this.keys.SPACE);
+    if (spaceJustPressed && time >= this.dashReadyAt) {
+      const dd = dir.lengthSq() > 0 ? dir : this.lastDir;
+      this.dashUntil = time + PLAYER.dashDurationMs;
+      this.dashReadyAt = time + PLAYER.dashCooldownMs;
+      this.iframeUntil = Math.max(this.iframeUntil, time + PLAYER.dashIframeMs);
+      this.body.setVelocity(dd.x * PLAYER.dashSpeed, dd.y * PLAYER.dashSpeed);
+      this.scene.spawnDashFx?.(this.x, this.y);
+    }
+
+    if (time < this.dashUntil) {
+      // Lock velocity during dash (don't let WASD slow it down).
+      // setVelocity already set above when dash started; keep it constant.
+    } else {
+      const speed = PLAYER.baseSpeed * (this.speedMultiplier || 1);
+      this.setVelocity(dir.x * speed, dir.y * speed);
+    }
 
     if (dir.lengthSq() > 0) this.rotation = Math.atan2(dir.y, dir.x);
+
+    // Built-in base pulse weapon.
+    if (time >= this.nextBasePulseAt) {
+      const target = this.scene.targeting?.findNearestEnemy(this.x, this.y, PLAYER.basePulseRange);
+      if (target) {
+        const angle = Math.atan2(target.y - this.y, target.x - this.x);
+        this.scene.spawnBullet(this.x, this.y, angle, PLAYER.basePulseDamage, true);
+        this.nextBasePulseAt = time + 1000 / PLAYER.basePulseFireRate;
+      }
+    }
 
     // --- history buffer (snake trail) ---
     // Newest sample at index 0. Body parts follow a polyline: current player -> h[0] -> h[1] -> ...

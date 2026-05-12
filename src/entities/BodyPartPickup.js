@@ -32,12 +32,29 @@ export class BodyPartPickup extends Phaser.Physics.Arcade.Sprite {
       `${value} ${color}`, {
         fontFamily: 'monospace', fontSize: '11px', color: '#dfe6f2',
       }).setOrigin(0.5, 1);
+
+    this._affordable = true;
   }
 
   setPosition(x, y) {
     super.setPosition(x, y);
     if (this.label) this.label.setPosition(x, y - this.size / 2 - 12);
     return this;
+  }
+
+  /**
+   * Re-color label / sprite based on whether the player can currently afford this.
+   * Called every frame from GameScene.
+   */
+  refreshAffordability(player) {
+    if (!this.label) return;
+    const c = player.cargo[this.color];
+    const can = !!(c && c.current >= this.value);
+    if (can === this._affordable) return;
+    this._affordable = can;
+    // Color the label to signal cost. Sprite keeps its pulse tween.
+    this.label.setColor(can ? '#dfe6f2' : '#ff8090');
+    this.label.setText(can ? `${this.value} ${this.color}` : `${this.value} ${this.color}  -  need more`);
   }
 
   /**

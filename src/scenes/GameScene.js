@@ -40,6 +40,9 @@ export class GameScene extends Phaser.Scene {
     };
     this.paused = false;
     this.deathHandled = false;
+    // Must be reset here too: scene.restart() reuses this class instance, so
+    // a stale deathPayload would make UIScene re-show the recap immediately.
+    this.deathPayload = null;
 
     this.drawBackground();
 
@@ -630,7 +633,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   restartGame() {
-    // UIScene keeps running and re-attaches to the new GameScene instance.
+    // Clear before restart so the UIScene cannot re-show the recap on the
+    // frames between scene.restart() being queued and create() running.
+    this.deathPayload = null;
     this.scene.restart();
   }
 

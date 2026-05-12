@@ -184,9 +184,12 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // Death recap
+    // Death recap. Hide whenever the player is alive again (e.g. after a
+    // restart) so a stale visible flag can't survive a scene reset.
     if (gs.deathPayload && !this.recapGroup.visible) {
       this.showRecap(gs.deathPayload);
+    } else if (!gs.deathPayload && this.recapGroup.visible) {
+      this.recapGroup.setVisible(false);
     }
   }
 

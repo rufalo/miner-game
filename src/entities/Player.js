@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION } from '../config.js';
+import { PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION, COMBO } from '../config.js';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
@@ -34,6 +34,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Body parts (BodyPart instances) attached to the snake
     this.parts = [];
+
+    // Combo state.
+    this.branchMode = false;           // split-tail unlocked
+    this.rainbowSpawned = false;       // PRISM orbital spawned
 
     // Damage feedback / iframes
     this.iframeUntil = 0;
@@ -82,6 +86,36 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     let n = 0;
     for (const p of this.parts) if (p.color === color) n++;
     return n;
+  }
+
+  /** Iterates only trail-following parts (excludes orbital units). */
+  trailParts() {
+    return this.parts.filter(p => p.followMode !== 'orbit');
+  }
+
+  /**
+   * Re-assigns trail chain indices (skipping orbital parts) and refreshes
+   * branched lateral offsets when split-tail mode is active. Call this any
+   * time the parts list changes.
+   */
+  chainChanged() {
+    let idx = 0;
+    for (const p of this.parts) {
+      if (p.followMode === 'orbit') {
+        p.chainIndex = -1;
+        continue;
+      }
+      p.chainIndex = idx;
+      // Branch offsets only apply past the threshold once branch mode is on.
+      if (this.branchMode && idx >= COMBO.branchAtParts) {
+        const beyond = idx - COMBO.branchAtParts;
+        p.lateralOffset = (beyond % 2 === 0 ? -1 : 1) * COMBO.branchLateralPx;
+      } else {
+        p.lateralOffset = 0;
+      }
+      idx++;
+    }
+    this.recomputeStats();
   }
 
   recomputeStats() {
@@ -278,13 +312,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /**
    * Smooth position along the snake polyline.
    * One unit of `floatSeg` walks one edge: player->h[0], then h[0]->h[1], etc.
-   * Matches the old integer snap at history[L] when floatSeg = L + 1 (see BodyPart).
+   * Matches the old integer snap at history[L] when floatSeg = L + 1.
+   * Also returns `tx`, `ty`: the unit tangent of the segment at that point
+   * (used to compute lateral offset for branched split-tail parts).
    */
   getSnakeTrailPoint(floatSeg) {
     const px = this.x;
     const py = this.y;
     const h = this.history;
-    if (floatSeg <= 0 || h.length === 0) return { x: px, y: py };
+    if (floatSeg <= 0 || h.length === 0) return { x: px, y: py, tx: 1, ty: 0 };
 
     let rem = floatSeg;
     let ax = px;
@@ -293,17 +329,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     for (let i = 0; i < h.length; i++) {
       const bx = h[i].x;
       const by = h[i].y;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const tx = dx / len;
+      const ty = dy / len;
       if (rem <= 1) {
         const t = Math.max(0, Math.min(1, rem));
         return {
-          x: ax + (bx - ax) * t,
-          y: ay + (by - ay) * t,
+          x: ax + dx * t,
+          y: ay + dy * t,
+          tx, ty,
         };
       }
       rem -= 1;
       ax = bx;
       ay = by;
     }
-    return { x: ax, y: ay };
+    return { x: ax, y: ay, tx: 1, ty: 0 };
   }
 }

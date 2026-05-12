@@ -294,6 +294,35 @@ export const HUNTER = {
   swarmTierBonus: 1,              // +N swarmers per tier reached
 };
 
+/**
+ * Combo system: parts can auto-merge or unlock alternative follow patterns.
+ *  - STACK   : 2 adjacent trail parts of the same weapon color fuse into one
+ *              ORBITAL part that keeps the same weapon kind but fires faster.
+ *  - RAINBOW : having at least one part of every primary color in the chain
+ *              spawns a PRISM orbital that fires multi-color spread shots.
+ *  - BRANCH  : once `branchAtParts` trail parts are attached, all additional
+ *              segments alternate to either side of the trail to form a
+ *              split-tail (visual offset, no extra parts).
+ */
+export const COMBO = {
+  branchAtParts: 6,                  // chain length that unlocks the split-tail
+  branchLateralPx: 26,               // perpendicular offset of branched parts
+
+  stackFireRateMult: 1.55,           // orbital twin fires this much faster
+  stackDamageMult: 1.30,
+  stackOrbitRadius: 46,
+  stackOrbitSpeed: 2.2,               // rad / sec
+
+  rainbowOrbitRadius: 78,
+  rainbowOrbitSpeed: 1.05,
+  prismFireRate: 1.2,                // shots / sec
+  prismRange: 380,
+  prismBaseDamage: 7,
+  prismDamagePerValue: 0.5,
+  prismFanRadians: 0.55,              // total fan width across 4 shots
+  prismValue: 8,
+};
+
 export const HUD = {
   barWidth: 160,
   barHeight: 14,

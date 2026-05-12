@@ -76,7 +76,7 @@ export class UIScene extends Phaser.Scene {
 
     // --- Tip line ---
     this.tipText = this.add.text(this.scale.width / 2, HUD.margin,
-      'WASD / arrows / hold mouse: move   -   Space: dash   -   1-4: prefer color   -   Esc: pause', {
+      'WASD/arrows/mouse  -  Space: dash  -  1-4: prefer color  -  Esc: pause  -  combos: stack / rainbow / split-tail', {
         fontFamily: 'monospace', fontSize: '11px', color: '#8693ad',
       }).setOrigin(0.5, 0);
 
@@ -226,14 +226,23 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    // Body part summary including hybrid kinds.
-    const counts = { red: 0, green: 0, blue: 0, yellow: 0, plasma: 0, swarm: 0, rapid: 0 };
-    for (const part of p.parts) counts[part.color] = (counts[part.color] || 0) + 1;
+    // Body part summary including hybrid kinds + combo state.
+    const counts = { red: 0, green: 0, blue: 0, yellow: 0, plasma: 0, swarm: 0, rapid: 0, prism: 0 };
+    let orbitalCount = 0;
+    for (const part of p.parts) {
+      counts[part.color] = (counts[part.color] || 0) + 1;
+      if (part.followMode === 'orbit') orbitalCount++;
+    }
     const hybridLine = (counts.plasma + counts.swarm + counts.rapid) > 0
       ? `   hyb  P:${counts.plasma} S:${counts.swarm} Ra:${counts.rapid}`
       : '';
+    const comboBits = [];
+    if (orbitalCount > 0) comboBits.push(`orb:${orbitalCount}`);
+    if (counts.prism > 0) comboBits.push('PRISM');
+    if (p.branchMode) comboBits.push('SPLIT');
+    const comboLine = comboBits.length ? `   [${comboBits.join(' ')}]` : '';
     this.partsText.setText(
-      `parts  R:${counts.red}  G:${counts.green}  B:${counts.blue}  Y:${counts.yellow}${hybridLine}`
+      `parts  R:${counts.red}  G:${counts.green}  B:${counts.blue}  Y:${counts.yellow}${hybridLine}${comboLine}`
     );
   }
 

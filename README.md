@@ -59,6 +59,16 @@ Cargo bars are **evolution gauges**. Walk next to a mineral deposit to auto-mine
 
 Each evolution makes the next one for that color cost a bit more. The colored squares scattered around are **boosters** that instantly fill ~60% of the matching gauge for free.
 
+## Combos & alternative follow patterns
+
+The snake isn't just a single straight tail. Parts can auto-combine and adopt different follow patterns:
+
+- **STACK** — whenever two same-kind weapon parts end up adjacent (e.g. two missile reds, or two plasmas), they instantly **fuse into an orbital twin** that circles the player at a fixed radius, firing faster and harder than either source part.
+- **RAINBOW (PRISM)** — once your chain contains at least one of every primary color (R, G, B, Y), a **PRISM orbital** spawns. It orbits at a wider radius and fires a 4-color bullet spread.
+- **BRANCH (split-tail)** — once your trail has 6 parts attached, it visually splits: every new trail-mode part alternates to either side of the trail, so the snake grows into two parallel ribbons behind you.
+
+The HUD parts line shows combo state in brackets, e.g. `[orb:2 PRISM SPLIT]`.
+
 ## Threats
 
 Two kinds of pressure:

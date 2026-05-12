@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
-import { BODY_PART, COLORS, BLUE, RED, PLAYER, KIND_BY_COLOR, HYBRID_STATS } from '../config.js';
+import { BODY_PART, COLORS, BLUE, RED, PLAYER, KIND_BY_COLOR, HYBRID_STATS, COMBO } from '../config.js';
+
+// Tint cycle for the PRISM orbital.
+const PRISM_TINT_CYCLE = [0xff5b6d, 0xffd64a, 0x52d97a, 0x4aa9ff];
 
 /**
  * Body segment. `color` is its identifier (red/blue/green/yellow or a hybrid
@@ -7,12 +10,32 @@ import { BODY_PART, COLORS, BLUE, RED, PLAYER, KIND_BY_COLOR, HYBRID_STATS } fro
  * parts, kind defaults to KIND_BY_COLOR[color].
  *
  * Construction options:
- *   { color, value, kind?, tint? }
+ *   {
+ *     color, value, kind?, tint?,
+ *     followMode?,        // 'trail' (default) | 'orbit'
+ *     lateralOffset?,     // perpendicular offset for split-tail parts
+ *     orbitRadius?,       // px distance from player when orbiting
+ *     orbitSpeed?,        // rad/sec
+ *     orbitStartAngle?,   // initial orbit angle
+ *     sizeMult?,          // visual scale multiplier (used for prism/twin)
+ *   }
  */
 export class BodyPart extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, player, chainIndex, opts) {
-    const start = player.getSnakeTrailPoint(BodyPart.trailFloatSeg(chainIndex, player));
-    super(scene, start.x, start.y, 'square');
+    const followMode = opts.followMode || 'trail';
+    const orbitRadius = opts.orbitRadius ?? 50;
+    const orbitStartAngle = opts.orbitStartAngle ?? 0;
+
+    let sx, sy;
+    if (followMode === 'orbit') {
+      sx = player.x + Math.cos(orbitStartAngle) * orbitRadius;
+      sy = player.y + Math.sin(orbitStartAngle) * orbitRadius;
+    } else {
+      const s = player.getSnakeTrailPoint(BodyPart.trailFloatSeg(chainIndex, player));
+      sx = s.x;
+      sy = s.y;
+    }
+    super(scene, sx, sy, 'square');
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
@@ -23,13 +46,21 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
     this.value = opts.value;
     this.chainIndex = chainIndex;
 
+    // Follow / formation state.
+    this.followMode = followMode;
+    this.lateralOffset = opts.lateralOffset || 0;
+    this.orbitRadius = orbitRadius;
+    this.orbitSpeed = opts.orbitSpeed ?? 1.6;
+    this.orbitAngle = orbitStartAngle;
+    this.sizeMult = opts.sizeMult ?? 1;
+
     this.applySize();
     this.body.setSize(64, 64);
     this.body.allowGravity = false;
     this.body.setImmovable(true);
 
     this.setTint(this.tint);
-    this.setDepth(-1 - chainIndex);
+    this.setDepth(this.followMode === 'orbit' ? 5 : -1 - chainIndex);
 
     this.maxHP = BODY_PART.hpBase + this.value * BODY_PART.hpPerValue;
     this.hp = this.maxHP;
@@ -39,7 +70,7 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
   }
 
   applySize() {
-    const size = BODY_PART.baseSize + this.value * BODY_PART.sizePerValue;
+    const size = (BODY_PART.baseSize + this.value * BODY_PART.sizePerValue) * (this.sizeMult || 1);
     this.setDisplaySize(size, size);
   }
 
@@ -80,9 +111,20 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
         this.damage   = s.baseDamage   + this.value * s.damagePerValue;
         break;
       }
+      case 'prism':
+        this.fireRate = COMBO.prismFireRate;
+        this.range    = COMBO.prismRange;
+        this.damage   = COMBO.prismBaseDamage + this.value * COMBO.prismDamagePerValue;
+        break;
       default:
         // Passive parts (speed / cargo): no weapon stats.
         break;
+    }
+
+    // Stack-fused parts get a fire-rate / damage boost on top of base kind.
+    if (this.stackBoost) {
+      this.fireRate *= COMBO.stackFireRateMult;
+      this.damage   *= COMBO.stackDamageMult;
     }
   }
 
@@ -119,8 +161,10 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
   destroyPart() {
     const idx = this.player.parts.indexOf(this);
     if (idx >= 0) this.player.parts.splice(idx, 1);
-    this.player.parts.forEach((p, i) => (p.chainIndex = i));
-    this.player.recomputeStats();
+    // Losing the PRISM allows a future RAINBOW combo to spawn a new one.
+    if (this.kind === 'prism' && this.player) this.player.rainbowSpawned = false;
+    // Reindex trail parts + refresh branched offsets + recompute stats.
+    this.player.chainChanged?.();
     this.destroy();
   }
 
@@ -141,11 +185,35 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
    */
   update(time, delta) {
     if (!this.player.active) return;
-    const s = this.player.getSnakeTrailPoint(BodyPart.trailFloatSeg(this.chainIndex, this.player));
-    this.setPosition(s.x, s.y);
+
+    if (this.followMode === 'orbit') {
+      this.orbitAngle += this.orbitSpeed * (delta / 1000);
+      const px = this.player.x + Math.cos(this.orbitAngle) * this.orbitRadius;
+      const py = this.player.y + Math.sin(this.orbitAngle) * this.orbitRadius;
+      this.setPosition(px, py);
+      // Face the direction of travel (tangent to the orbit).
+      this.rotation = this.orbitAngle + Math.PI / 2;
+    } else {
+      const s = this.player.getSnakeTrailPoint(BodyPart.trailFloatSeg(this.chainIndex, this.player));
+      let x = s.x;
+      let y = s.y;
+      if (this.lateralOffset) {
+        // Perpendicular to the segment tangent: (-ty, tx)
+        x += -s.ty * this.lateralOffset;
+        y +=  s.tx * this.lateralOffset;
+      }
+      this.setPosition(x, y);
+    }
+
     if (this.body) {
       this.body.setVelocity(0, 0);
       this.body.reset(this.x, this.y);
+    }
+
+    // PRISM cycles through the four primary tints to advertise itself.
+    if (this.kind === 'prism') {
+      const i = Math.floor(time / 220) % PRISM_TINT_CYCLE.length;
+      this.setTint(PRISM_TINT_CYCLE[i]);
     }
 
     if (time < this.nextFireAt) return;
@@ -178,6 +246,16 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
       case 'rapid':
         return { fire: (self, _t, a) =>
           self.scene.spawnRapidBullet(self.x, self.y, a, self.damage) };
+      case 'prism':
+        return { fire: (self, _t, a) => {
+          const colors = PRISM_TINT_CYCLE;
+          const fan = COMBO.prismFanRadians;
+          for (let i = 0; i < 4; i++) {
+            const off = (i - 1.5) * (fan / 3);
+            const b = self.scene.spawnBullet(self.x, self.y, a + off, self.damage, true);
+            b.setTint(colors[i]);
+          }
+        } };
       default:
         return null;
     }

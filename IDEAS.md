@@ -20,10 +20,10 @@ The biggest weak point right now is "what am I working toward?". Adding any one 
 
 ## 2. Snake / body-part depth
 
-The growth loop has been overhauled into an evolution system (see §13). Remaining ideas:
+The growth loop has been overhauled into an evolution system (see §13) and a combo / alternative-follow system has been added on top (see §15). Remaining ideas:
 
 - **Tier / rarity on parts** — visual outline, particle aura, big stat jumps. Mining a rarer pickup feels like an event. **M**
-- **More part archetypes** beyond the three implemented hybrids:
+- **More part archetypes** beyond the three implemented hybrids and the PRISM:
   - **Black**: AoE pulse around the part. **S**
   - **Chain-lightning** that arcs between enemies. **M**
   - **Shield emitter** (blue + yellow): regenerating HP buffer for adjacent parts. **M**
@@ -31,7 +31,10 @@ The growth loop has been overhauled into an evolution system (see §13). Remaini
   - **Treads** (green + yellow): extra speed AND threshold reduction. **S**
   - **Engine** (booster): adds a periodic dash. **S**
 - **Part placement matters** — let the player drag-reorder parts at any time; e.g., front-mounted parts get +damage, rear parts get +HP. **M**
-- **Combos / set bonuses** — e.g., 3 yellow in a row = bonus cargo, alternating blue / red = faster fire. **M**
+- **More combo recipes** beyond STACK / RAINBOW / BRANCH:
+  - **3 same color** (already auto-upgrades, but a STACK-style consolidation could fold them into a single mega-orbital). **S**
+  - **TRIANGLE** (3 of any kind adjacent) → 3-unit rotating formation, evenly spaced. **M**
+  - **CROWN** (2 yellow + 2 green adjacent) → speed + threshold reduction halo. **S**
 - **Removable parts** — drop a part to swap it. Currently you can only grow the snake. **S**
 - **Snake self-collision damage** when an enemy melee'd part gets pushed into another. **S**
 
@@ -166,3 +169,26 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
   - **rapid** (blue + green): very high fire-rate weak bullets
 - **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
 - **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.
+
+## 15. Implemented: Combo & alternative-follow system
+
+Body parts can now auto-combine and adopt different follow patterns than the basic trailing snake.
+
+- **STACK** — whenever two adjacent same-kind weapon parts (turret, missile, plasma, swarm, rapid) end up next to each other in the chain, they immediately fuse:
+  - Both parts are consumed.
+  - A new **orbital twin** spawns that circles the player at ~46 px radius.
+  - The twin keeps the same weapon kind but with `×1.55` fire rate and `×1.30` damage (`COMBO.stackFireRateMult` / `COMBO.stackDamageMult`).
+  - Total `value` carries over, so size and base stats scale accordingly.
+  - Combo detection re-runs after each fuse, so a long mono-color tail collapses into multiple orbitals.
+- **RAINBOW (PRISM)** — once all four primary colors (R, G, B, Y) exist anywhere in the chain, a one-shot **PRISM orbital** spawns at ~78 px radius and ~1 rad/s.
+  - Fires 4 bullets in a small fan, each tinted one of the four primary colors.
+  - Sprite cycles through the four primary tints to advertise its presence.
+- **BRANCH (split-tail)** — once the trail has `COMBO.branchAtParts` (6) trail-mode parts attached, the chain unlocks split-tail mode:
+  - All trail parts past the threshold receive a lateral offset perpendicular to the trail tangent, alternating left / right.
+  - Visually the tail splits into two parallel ribbons trailing behind the snake.
+  - New growth keeps alternating sides, so the more you grow the wider the split.
+- **Follow modes** are now first-class on `BodyPart`:
+  - `'trail'` — the original snake polyline; supports `lateralOffset` for branching.
+  - `'orbit'` — circles the player at a fixed radius and angular speed (used by STACK twins and the PRISM).
+- **Damage / death** — orbital parts still take damage from enemy bullets and missiles; on death they reindex the chain like any other part.
+- **HUD** — the parts line now shows combo state, e.g. `parts R:1 G:1 B:2 Y:1   hyb P:1   [orb:1 PRISM SPLIT]`.

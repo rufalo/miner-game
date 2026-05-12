@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import {
   COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
-  EVOLUTION, HYBRIDS, HYBRID_STATS,
+  EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO,
 } from '../config.js';
 import { Player } from '../entities/Player.js';
 import { BodyPart } from '../entities/BodyPart.js';
@@ -282,7 +282,7 @@ export class GameScene extends Phaser.Scene {
 
     if (appendMode) {
       const value = EVOLUTION.baseValue + (player.evolutions[color] - 1) * EVOLUTION.valuePerEvolution;
-      const part = new BodyPart(this, player, player.parts.length, { color, value });
+      const part = new BodyPart(this, player, player.trailParts().length, { color, value });
       player.parts.push(part);
       this.bodyParts.add(part);
       this.spawnGrowthFx(player.x, player.y, COLORS[color], 'NEW ' + color.toUpperCase());
@@ -294,7 +294,8 @@ export class GameScene extends Phaser.Scene {
       this.spawnGrowthFx(target.x, target.y, COLORS[color], 'UPGRADE');
     }
 
-    player.recomputeStats();
+    player.chainChanged();
+    this.checkCombos();
   }
 
   spawnHybridEvolution(colorA, colorB) {
@@ -310,7 +311,7 @@ export class GameScene extends Phaser.Scene {
     player.evolutions[colorB] = (player.evolutions[colorB] || 0) + 1;
 
     const value = EVOLUTION.baseValue + 2;
-    const part = new BodyPart(this, player, player.parts.length, {
+    const part = new BodyPart(this, player, player.trailParts().length, {
       color: hybrid.kind,
       kind: hybrid.kind,
       tint: hybrid.tint,
@@ -321,7 +322,128 @@ export class GameScene extends Phaser.Scene {
 
     this.spawnGrowthFx(player.x, player.y, hybrid.tint, hybrid.label + ' !');
     this.cameras.main.flash(160, 255, 255, 255, false);
-    player.recomputeStats();
+    player.chainChanged();
+    this.checkCombos();
+  }
+
+  // --- Combo system ---
+
+  /**
+   * Scans the chain for known combo patterns and applies them.
+   * Recipes:
+   *   STACK   - 2 adjacent trail parts of the same weapon color (red/blue)
+   *             fuse into one ORBITAL twin with boosted fire rate & damage.
+   *   RAINBOW - all four primary colors present in chain spawns a PRISM
+   *             orbital (one-shot, doesn't consume parts).
+   *   BRANCH  - chain length >= COMBO.branchAtParts unlocks split-tail mode.
+   */
+  checkCombos() {
+    const player = this.player;
+    if (!player) return;
+
+    // Kinds that have a weapon (passives don't fuse via STACK).
+    const STACKABLE = new Set(['turret', 'missile', 'plasma', 'swarm', 'rapid']);
+
+    // STACK: scan trail parts for adjacent same-kind weapon pairs.
+    const trail = player.trailParts();
+    for (let i = 0; i < trail.length - 1; i++) {
+      const a = trail[i];
+      const b = trail[i + 1];
+      if (!a.active || !b.active) continue;
+      if (a.kind !== b.kind) continue;
+      if (!STACKABLE.has(a.kind)) continue;
+      this.fuseStack(a, b);
+      // Chain mutated; re-run combo check after fusion to catch chained combos.
+      this.checkCombos();
+      return;
+    }
+
+    // BRANCH: enable split-tail once chain is long enough.
+    if (!player.branchMode && trail.length >= COMBO.branchAtParts) {
+      player.branchMode = true;
+      player.chainChanged();
+      this.flashWaveBanner('SPLIT TAIL UNLOCKED');
+    }
+
+    // RAINBOW: need at least one of every primary color present somewhere
+    // in the chain (orbital twins still count, branched parts still count).
+    if (!player.rainbowSpawned) {
+      const present = new Set(player.parts.map(p => p.color));
+      const hasAll = COLOR_KEYS.every(k => present.has(k));
+      if (hasAll) {
+        this.spawnPrismOrbital();
+        player.rainbowSpawned = true;
+      }
+    }
+  }
+
+  /**
+   * Removes two adjacent same-kind parts and spawns one orbital twin with
+   * their combined value plus stack-bonus stats.
+   */
+  fuseStack(a, b) {
+    const player = this.player;
+    const x = (a.x + b.x) * 0.5;
+    const y = (a.y + b.y) * 0.5;
+    const totalValue = a.value + b.value;
+    const color = a.color;
+    const kind = a.kind;
+    const tint = a.tint;
+
+    // Detach both parts from the chain.
+    [a, b].forEach(p => {
+      const idx = player.parts.indexOf(p);
+      if (idx >= 0) player.parts.splice(idx, 1);
+      p.destroy();
+    });
+
+    // Spawn the twin as an orbital weapon with stack-boost stats.
+    const startAngle = Math.random() * Math.PI * 2;
+    const twin = new BodyPart(this, player, -1, {
+      color,
+      kind,
+      tint,
+      value: totalValue,
+      followMode: 'orbit',
+      orbitRadius: COMBO.stackOrbitRadius,
+      orbitSpeed: COMBO.stackOrbitSpeed,
+      orbitStartAngle: startAngle,
+      sizeMult: 1.1,
+    });
+    twin.stackBoost = true;
+    twin.applyKindStats();
+    player.parts.push(twin);
+    this.bodyParts.add(twin);
+    player.chainChanged();
+
+    this.spawnGrowthFx(x, y, tint, color.toUpperCase() + ' STACK!');
+    this.cameras.main.flash(140, 255, 255, 255, false);
+  }
+
+  /**
+   * Spawns a single PRISM orbital that follows the player at a wider radius,
+   * firing a 4-color spread at the nearest enemy.
+   */
+  spawnPrismOrbital() {
+    const player = this.player;
+    const prism = new BodyPart(this, player, -1, {
+      color: 'prism',
+      kind: 'prism',
+      tint: 0xffffff,
+      value: COMBO.prismValue,
+      followMode: 'orbit',
+      orbitRadius: COMBO.rainbowOrbitRadius,
+      orbitSpeed: COMBO.rainbowOrbitSpeed,
+      orbitStartAngle: Math.PI / 2,
+      sizeMult: 1.5,
+    });
+    player.parts.push(prism);
+    this.bodyParts.add(prism);
+    player.chainChanged();
+
+    this.spawnGrowthFx(player.x, player.y, 0xffffff, 'RAINBOW PRISM !');
+    this.cameras.main.flash(280, 255, 255, 255, false);
+    this.cameras.main.shake(160, 0.006);
   }
 
   /** A big ring + floating label centered on (x,y). `tint` is hex int. */

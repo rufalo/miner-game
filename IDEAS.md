@@ -45,7 +45,10 @@ The growth loop has been overhauled into an evolution system (see §13). Remaini
 
 ## 4. Enemies & AI
 
-- **2 more enemy types** to fill out the bestiary:
+Persistent **hunter** and **swarmer wave** systems were added (see §14).
+Remaining ideas:
+
+- **More enemy types** to fill out the bestiary:
   - **Splitter**: large enemy that breaks into 2–3 fast minions on death. **M**
   - **Sniper**: very long range, telegraphed laser beam. **M**
   - **Bomber / kamikaze**: slow, explodes on contact. **S**
@@ -133,6 +136,21 @@ If aiming for one short polish session, this is a good order:
 3. **Cargo-full warning + pickup-affordability hint** (S) — clarity
 4. **Dash on Space + base weapon** (S) — combat without parts no longer helpless
 5. **Death recap + persistent best run** (S) — gives the loop closure
+
+## 14. Implemented: Persistent hunter pressure
+
+Adds an always-on threat layer on top of the zone-based enemies:
+
+- **Hunter spawner** ([`src/systems/HunterSpawner.js`](src/systems/HunterSpawner.js)) maintains a target number of active hunters at all times. Target scales with run time and the highest tier reached:  
+  `target = base(1) + 0.6 × minutes + 0.5 × maxTier`, capped at 9.
+- Hunter spawn rate gets faster as the player pushes into outer tiers (`spawnIntervalMs` drops by `spawnIntervalDropPerTier`).
+- **Hunter enemy** ([`HunterEnemy.js`](src/entities/enemies/HunterEnemy.js)): no home, never de-aggros, always pursues the player. Red 4-point star silhouette, moderate speed and HP, dangerous in numbers.
+- **Swarmer waves**: every 45–75 s a pack of 4–7 fast fragile melee enemies (+1 per tier) is launched at the player from off-screen with a `WAVE INCOMING — N swarmers` banner and brief camera shake.
+- **Swarmer enemy** ([`SwarmerEnemy.js`](src/entities/enemies/SwarmerEnemy.js)): tiny yellow dot, very fast, 6 HP, low damage but rapid contact. Lateral wobble in flight so packs read as a flock.
+- **Off-screen spawn**: hunters and swarmers always appear just outside the camera, clamped to world bounds, so things never visibly pop in.
+- **Player base pulse weapon buffed** (1.7 shots/s, 6 damage, 360 px range) so a chainless player has a reliable starter weapon against hunters.
+- **HUD readout** under the tier line: `hunters N/target   wave in Xs`.
+- **Minimap markers**: hunters appear as bright red dots, swarmers as small yellow dots, both updated every frame.
 
 ## 13. Implemented: Evolution system
 

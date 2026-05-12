@@ -28,6 +28,8 @@ export class BootScene extends Phaser.Scene {
     this.makeEnemyTex('enemy_gunner',  0xb56dff, 'triangle');
     this.makeEnemyTex('enemy_missile', 0x6dfff0, 'pentagon');
     this.makeEnemyTex('enemy_brute',   0xff5555, 'hex');
+    this.makeEnemyTex('enemy_hunter',  0xff2a2a, 'spike');
+    this.makeEnemyTex('enemy_swarmer', 0xffe14a, 'circle');
 
     this.scene.start('GameScene');
     this.scene.launch('UIScene');
@@ -136,6 +138,20 @@ export class BootScene extends Phaser.Scene {
         for (let i = 0; i < 6; i++) {
           const a = (i * Math.PI * 2) / 6;
           pts.push({ x: half + Math.cos(a) * (half - 4), y: half + Math.sin(a) * (half - 4) });
+        }
+        g.fillPoints(pts, true);
+        g.strokePoints(pts, true);
+        break;
+      }
+      case 'spike': {
+        // 4-point star (sharp, predator-y)
+        const pts = [];
+        const outer = half - 4;
+        const inner = outer * 0.42;
+        for (let i = 0; i < 8; i++) {
+          const a = -Math.PI / 2 + (i * Math.PI) / 4;
+          const r = (i % 2 === 0) ? outer : inner;
+          pts.push({ x: half + Math.cos(a) * r, y: half + Math.sin(a) * r });
         }
         g.fillPoints(pts, true);
         g.strokePoints(pts, true);

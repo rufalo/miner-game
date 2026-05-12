@@ -32,16 +32,38 @@ Then open the URL Vite prints (usually `http://localhost:5173`).
 
 ## Controls
 
-- **WASD** or **Arrow keys**: move
-- **Hold left mouse**: move toward the cursor
+- **WASD** / **Arrow keys** — move
+- **Hold left mouse** — move toward the cursor
+- **Space** — dash (i-frames, short cooldown)
+- **1 / 2 / 3 / 4** — prefer a color (red / green / blue / yellow). Mining the preferred color fills its evolution gauge ~1.5× faster.
+- **Esc** — pause / resume
+- **R** — restart (when paused or dead)
 
 ## Colors
 
-- **Red** minerals -> Red body parts fire **missiles** at nearby enemies
-- **Blue** minerals -> Blue body parts are **turrets** that fire bullets
-- **Green** minerals -> Green body parts boost **movement speed**
-- **Yellow** minerals -> Yellow body parts boost **cargo capacity**
+- **Red** — adds a **missile launcher** segment (homing AoE).
+- **Blue** — adds a **turret** segment (bullets).
+- **Green** — adds a **speed boost** segment.
+- **Yellow** — reduces all evolution thresholds (faster growth across the board).
 
-Walk next to a mineral deposit to auto-mine it. Walk next to a colored square pickup with enough matching minerals to auto-purchase it. It attaches to the tail of your snake and gives its bonus passively.
+## Evolution system
 
-The further you travel from origin, the richer the deposits and pickups - but enemy zones guard them.
+Cargo bars are **evolution gauges**. Walk next to a mineral deposit to auto-mine it; that color's gauge fills as you collect. When a gauge tops up, it pops:
+
+- **Under 3 parts of that color attached** → a new segment of that color is appended to your snake.
+- **3 or more attached** → the system upgrades your weakest matching part instead (bigger, more HP, stronger weapon).
+- **If another gauge is at 80%+** when one pops, both drain and a **hybrid part** is spawned:
+  - **PLASMA** (blue + red) — slow, very heavy single shot at long range.
+  - **SWARM** (green + red) — rapid small homing missiles.
+  - **RAPID** (blue + green) — high-rate weak bullets.
+
+Each evolution makes the next one for that color cost a bit more. The colored squares scattered around are **boosters** that instantly fill ~60% of the matching gauge for free.
+
+## Threats
+
+Two kinds of pressure:
+
+- **Enemy zones** in the outer tier rings — sit still until you wander near, then attack. Guard the richer deposits.
+- **Hunters and swarms** — the longer a run lasts, the more red *hunter* enemies relentlessly seek you out from off-screen, and occasional swarmer waves charge you in packs. Pressure scales with run time and max tier reached. Watch the bottom-left readout: `hunters N/target   wave in Xs`.
+
+The further you travel from origin, the richer the deposits and the nastier the enemy mix.

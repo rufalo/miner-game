@@ -153,7 +153,15 @@ export class UIScene extends Phaser.Scene {
 
     const dist = Math.hypot(p.x - gs.worldCenter.x, p.y - gs.worldCenter.y);
     const tier = gs.tiers.tierForDistance(dist);
-    this.tierText.setText(`tier ${tier}   |   dist ${Math.floor(dist)}`);
+    const hs = gs.hunterSpawner;
+    let line = `tier ${tier}   |   dist ${Math.floor(dist)}`;
+    if (hs) {
+      const hCount = hs.activeHunterCount();
+      const hTarget = hs.targetHunterCount();
+      const wave = Math.ceil(hs.secondsUntilWave(time ?? this.time.now));
+      line += `   |   hunters ${hCount}/${hTarget}   wave in ${wave}s`;
+    }
+    this.tierText.setText(line);
 
     // HP
     const hpFrac = Math.max(0, p.hp / p.maxHP);
@@ -269,6 +277,18 @@ export class UIScene extends Phaser.Scene {
       if (aliveCount === 0) continue;
       g.fillStyle(MINIMAP.enemyZoneColor, 0.7);
       g.fillCircle(zx, zy, 2 + Math.min(3, aliveCount));
+    }
+
+    // Persistent hunters / swarmers (mobile threats) - drawn brighter so they
+    // stand out from static enemy zones.
+    const enemies = this.gs.enemies?.getChildren?.() ?? [];
+    for (const e of enemies) {
+      if (!e.active) continue;
+      const isHunter = e.texture?.key === 'enemy_hunter';
+      const isSwarmer = e.texture?.key === 'enemy_swarmer';
+      if (!isHunter && !isSwarmer) continue;
+      g.fillStyle(isHunter ? 0xff2a2a : 0xffe14a, 0.95);
+      g.fillCircle(e.x * k, e.y * k, isHunter ? 2.5 : 1.5);
     }
 
     // Pickups (color dots)

@@ -17,6 +17,7 @@ import { BruteEnemy } from '../entities/enemies/BruteEnemy.js';
 import { Tiers } from '../systems/Tiers.js';
 import { Spawner } from '../systems/Spawner.js';
 import { Targeting } from '../systems/Targeting.js';
+import { HunterSpawner } from '../systems/HunterSpawner.js';
 
 // localStorage key for best-run persistence.
 const BEST_RUN_KEY = 'miner-snake:best-run-v1';
@@ -57,6 +58,7 @@ export class GameScene extends Phaser.Scene {
     this.tiers = new Tiers(this.worldCenter);
     this.targeting = new Targeting(this);
     this.spawner = new Spawner(this, this.tiers);
+    this.hunterSpawner = new HunterSpawner(this);
 
     // Player
     this.player = new Player(this, this.worldCenter.x, this.worldCenter.y);
@@ -351,6 +353,22 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(70, 0.0035);
   }
 
+  /**
+   * Big centered text that fades. Used for swarm wave warnings.
+   */
+  flashWaveBanner(text) {
+    const cam = this.cameras.main;
+    const t = this.add.text(cam.midPoint.x, cam.midPoint.y - 120, text, {
+      fontFamily: 'monospace', fontSize: '22px', color: '#ff8080',
+      stroke: '#000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(80).setScrollFactor(1);
+    this.tweens.add({
+      targets: t, y: t.y - 30, alpha: 0, duration: 1800, ease: 'Quad.easeOut',
+      onComplete: () => t.destroy(),
+    });
+    cam.shake(140, 0.0035);
+  }
+
   spawnBoosterFx(x, y, color) {
     const ring = this.add.circle(x, y, 8, 0xffffff, 0);
     ring.setStrokeStyle(2, COLORS[color], 1);
@@ -506,6 +524,7 @@ export class GameScene extends Phaser.Scene {
     if (this.player.hp <= 0) return; // freeze logic on death
 
     this.player.update(time, delta);
+    this.hunterSpawner?.update(time);
 
     // Body parts follow trail
     const parts = this.player.parts;

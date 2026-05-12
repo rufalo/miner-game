@@ -44,9 +44,9 @@ export const PLAYER = {
   dashIframeMs: 260,
 
   // Built-in base pulse weapon so even a chainless player can defend itself.
-  basePulseFireRate: 0.9,         // shots / second
-  basePulseDamage: 4,
-  basePulseRange: 280,
+  basePulseFireRate: 1.7,         // shots / second
+  basePulseDamage: 6,
+  basePulseRange: 360,
 };
 
 export const GREEN = {
@@ -251,6 +251,47 @@ export const ENEMY = {
   /** Idle patrol radius around home (px). */
   wanderRadiusMin: 160,
   wanderRadiusMax: 320,
+
+  // --- Persistent hunters (no home, always seek the player) ---
+  hunterSpeed: 155,
+  hunterHP: 36,
+  hunterDamage: 11,
+  hunterContactCooldownMs: 650,
+
+  // --- Swarmers (small fast melee, spawned in packs) ---
+  swarmerSpeed: 220,
+  swarmerHP: 6,
+  swarmerDamage: 5,
+  swarmerContactCooldownMs: 450,
+};
+
+/**
+ * Hunter spawner: persistent threat system. Maintains a target number of
+ * active hunters that always seek the player, plus periodic swarmer waves.
+ * Pressure scales with run time and max tier reached.
+ */
+export const HUNTER = {
+  /** Target = base + perMinute * elapsedMinutes + perTier * maxTier (clamped). */
+  baseCount: 1,
+  perMinute: 0.6,
+  perTier: 0.5,
+  maxCount: 9,
+
+  /** Min ms between hunter spawn attempts (when below target). */
+  spawnIntervalMs: 9000,
+  spawnIntervalMinMs: 3000,
+  spawnIntervalDropPerTier: 800,
+
+  /** Distance off-screen to spawn hunters (units). */
+  spawnDistance: 720,
+
+  /** Periodic swarmer wave. */
+  swarmIntervalMinMs: 45000,
+  swarmIntervalMaxMs: 75000,
+  swarmFirstWaveDelayMs: 30000,
+  swarmCountMin: 4,
+  swarmCountMax: 7,
+  swarmTierBonus: 1,              // +N swarmers per tier reached
 };
 
 export const HUD = {

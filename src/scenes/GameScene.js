@@ -23,7 +23,14 @@ import { HunterSpawner } from '../systems/HunterSpawner.js';
 const BEST_RUN_KEY = 'miner-snake:best-run-v1';
 
 // --- Draft card definitions ---
-// Each card: { id, title, desc, rarity, eligible(player, scene), apply(player, scene) }
+// Each card:
+//   { id, title, desc, tier?, eligible(player, scene), apply(player, scene) }
+//
+// `tier` controls which draft pools the card can appear in:
+//   - 'regular'     (default): only in regular evolution-triggered drafts.
+//   - 'maintenance'          : eligible in both regular and elite drafts.
+//   - 'elite'                : only in boss-triggered drafts (BIG payoffs).
+//
 // `eligible` returns true if the card should be available in the pool.
 // `apply` mutates player / scene; recomputeStats + refreshAllPartStats run after.
 const DRAFT_CARDS = [
@@ -95,6 +102,7 @@ const DRAFT_CARDS = [
     id: 'heal',
     title: 'Full Heal',
     desc: 'Restore your HP to maximum.',
+    tier: 'maintenance',
     eligible: (p) => p.hp < p.maxHP,
     apply: (p) => { p.hp = p.maxHP; },
   },
@@ -102,6 +110,7 @@ const DRAFT_CARDS = [
     id: 'repair-parts',
     title: 'Repair All Parts',
     desc: 'Restore every body part to full HP.',
+    tier: 'maintenance',
     eligible: (p) => p.parts.some(x => x.hp < x.maxHP),
     apply: (p) => { for (const part of p.parts) part.hp = part.maxHP; },
   },
@@ -109,7 +118,7 @@ const DRAFT_CARDS = [
     id: 'fuse-lowest',
     title: 'Fuse Lowest 2 Tail',
     desc: 'Combine your two weakest tail segments into one (frees a slot).',
-    rarity: 'utility',
+    tier: 'maintenance',
     eligible: (p) => p.trailParts().length >= 2,
     apply: (p, s) => {
       const trail = p.trailParts().slice().sort((a, b) => a.value - b.value);
@@ -131,7 +140,7 @@ const DRAFT_CARDS = [
     id: 'recycle-smallest',
     title: 'Recycle Smallest Tail',
     desc: 'Remove your smallest tail segment, freeing a slot.',
-    rarity: 'utility',
+    tier: 'maintenance',
     eligible: (p) => p.trailParts().length >= 1,
     apply: (p) => {
       const trail = p.trailParts().slice().sort((a, b) => a.value - b.value);
@@ -142,6 +151,85 @@ const DRAFT_CARDS = [
       drop.destroy();
       p.chainChanged();
     },
+  },
+
+  // --- Elite (boss-only) cards ---
+  // Roughly 2x the magnitude of regular cards or unique abilities. Only
+  // offered in drafts triggered by killing a tier mini-boss.
+  {
+    id: 'elite-tail-cap',
+    title: '+2 Max Tail',
+    desc: 'Raise your tail capacity by 2 segments.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => { p.maxTailBonus = (p.maxTailBonus || 0) + 2; },
+  },
+  {
+    id: 'elite-red-damage',
+    title: '+35% Red Damage',
+    desc: 'Missiles, swarm and plasma hit 35% harder.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => { p.boosts.redDamageMult *= 1.35; },
+  },
+  {
+    id: 'elite-blue-firerate',
+    title: '+35% Blue Fire Rate',
+    desc: 'Turrets, rapid, plasma and prism shoot 35% faster.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => { p.boosts.blueFireRateMult *= 1.35; },
+  },
+  {
+    id: 'elite-iron-hide',
+    title: 'Iron Hide',
+    desc: '+30 max HP, full heal, repair every body part.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => {
+      p.maxHP += 30;
+      p.hp = p.maxHP;
+      for (const part of p.parts) part.hp = part.maxHP;
+    },
+  },
+  {
+    id: 'elite-phase-shift',
+    title: 'Phase Shift',
+    desc: 'Dash recharges 30% faster and reaches further.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => { p.boosts.dashCooldownMult *= 0.70; },
+  },
+  {
+    id: 'elite-photonic-surge',
+    title: 'Photonic Surge',
+    desc: 'Your built-in pulse weapon hits 60% harder.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => { p.boosts.pulseDamageMult *= 1.60; },
+  },
+  {
+    id: 'elite-tail-genesis',
+    title: 'Tail Genesis',
+    desc: 'Grow a new tail segment of a random color (or upgrade your weakest if your tail is full).',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p, s) => {
+      const colors = ['red', 'green', 'blue', 'yellow'];
+      const color = Phaser.Utils.Array.GetRandom(colors);
+      // Reuse spawnEvolution: it appends a new segment OR upgrades, follows
+      // the tail cap, fires combos, and even nudges the global ramp. Safe to
+      // call mid-apply because noteEvolutionForDraft is gated on pendingDraft.
+      s.spawnEvolution(color);
+    },
+  },
+  {
+    id: 'elite-yellow-mastery',
+    title: 'Yellow Mastery',
+    desc: '+10% threshold discount: all gauges fill faster.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => { p.boosts.extraYellowReduction += 0.10; },
   },
 ];
 
@@ -644,16 +732,23 @@ export class GameScene extends Phaser.Scene {
   /**
    * Builds a random pool of eligible draft cards and pauses the game.
    * UIScene watches `this.pendingDraft` to show the menu.
+   *
+   * opts.elite (default false) - elite drafts (triggered by boss kills) draw
+   * from { tier: 'elite' | 'maintenance' }; regular drafts draw from
+   * { tier: 'regular' (default) | 'maintenance' }.
    */
-  openDraft() {
+  openDraft(opts = {}) {
     const player = this.player;
     if (!player) return;
-    const pool = DRAFT_CARDS.filter(c => c.eligible(player, this));
+    const elite = !!opts.elite;
+    const allow = elite
+      ? new Set(['elite', 'maintenance'])
+      : new Set(['regular', 'maintenance', undefined]);
+    const pool = DRAFT_CARDS.filter(c => allow.has(c.tier) && c.eligible(player, this));
     if (pool.length === 0) return;
-    // Sample without replacement, up to optionCount cards.
     Phaser.Utils.Array.Shuffle(pool);
     const options = pool.slice(0, Math.min(DRAFT.optionCount, pool.length));
-    this.pendingDraft = { options };
+    this.pendingDraft = { options, elite };
     this.setPaused(true);
   }
 
@@ -840,14 +935,13 @@ export class GameScene extends Phaser.Scene {
 
     this.flashWaveBanner(`TIER ${boss.tier} BOSS DEFEATED`);
 
-    // Guaranteed draft pick (independent of the evolution counter). If one is
-    // already open, this one will fire after the player picks the current one.
+    // Guaranteed ELITE draft pick (drawn from the boss-only pool). If one is
+    // already open, retry shortly after the current draft might close.
     if (!this.pendingDraft) {
-      this.openDraft();
+      this.openDraft({ elite: true });
     } else {
-      // Queue: schedule a check shortly after the current draft might close.
       this.time.delayedCall(200, () => {
-        if (!this.pendingDraft) this.openDraft();
+        if (!this.pendingDraft) this.openDraft({ elite: true });
       });
     }
   }

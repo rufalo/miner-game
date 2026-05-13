@@ -187,7 +187,7 @@ Each tier ring (1..maxTier) has a single seeded **boss** placed at ~85% of the w
   - Big explosion + camera flash + shake.
   - One high-value mineral (value 12–16) of each primary color scattered around the corpse.
   - Banner: `TIER N BOSS DEFEATED`.
-  - **Guaranteed draft pick** queued immediately, independent of the regular `evolutionsSinceLastDraft` counter — so killing a boss is always rewarded with a strategic choice.
+  - **Guaranteed ELITE draft pick** queued immediately, independent of the regular `evolutionsSinceLastDraft` counter. Elite drafts draw from a boss-only pool (`tier: 'elite'` in `DRAFT_CARDS`) plus the maintenance pool. Elite cards have roughly 2x the magnitude of regular cards (e.g. `+2 Max Tail`, `+35% Red Damage`, `Iron Hide`, `Photonic Surge`, `Phase Shift`, `Tail Genesis`). UIScene renders them with a gold frame and a `BOSS REWARD - ELITE UPGRADE` banner.
 - **Minimap**: bosses render as bright red diamonds (slightly larger than the hunter / swarmer dots) so the player can navigate toward them deliberately.
 - **Run stats / best run**: `stats.bossesDefeated` is tracked, shown on the death recap, and weighted heavily in the best-run score (`+200 per boss kill`).
 

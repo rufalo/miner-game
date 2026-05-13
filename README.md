@@ -98,7 +98,7 @@ Below 30% HP a boss goes **BERSERK** (nearly 2× speed, attacks ~35% faster). On
 
 - Big explosion + camera flash.
 - One high-value mineral of each primary color (R / G / B / Y) scattered around the corpse.
-- A **guaranteed draft pick** independent of the regular evolution counter.
+- A **guaranteed ELITE draft pick** — gold-framed cards drawn from a boss-only pool with ~2x the magnitude of regular cards (e.g. `+2 Max Tail`, `+35% Red Damage`, `Iron Hide`, `Photonic Surge`, `Phase Shift`, `Tail Genesis`). Maintenance cards (heal / repair / fuse) can still appear so the choice isn't always pure DPS.
 - Counted in your run stats + best run (`+200` to the best-run score).
 
 The world background also has a subtle **biome tint** per tier so you feel each ring you cross.

@@ -142,10 +142,15 @@ export class UIScene extends Phaser.Scene {
       }).setOrigin(0.5, 0.5);
       card.add([bg, ttl, dsc, idx]);
       card.bg = bg; card.ttl = ttl; card.dsc = dsc; card.idx = idx;
-      // Click to pick.
+      // Click to pick. Hover uses the card's current frame colors so elite
+      // cards keep their gold outline even after un-hovering.
       bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerover', () => bg.setStrokeStyle(2, 0xffd54a));
-      bg.on('pointerout',  () => bg.setStrokeStyle(2, 0x3a4868));
+      bg.on('pointerover', () => bg.setStrokeStyle(3, card._hoverColor ?? 0xffd54a));
+      bg.on('pointerout',  () => {
+        const fc = card._frameColor ?? 0x3a4868;
+        const isElite = fc === 0xffd54a;
+        bg.setStrokeStyle(isElite ? 3 : 2, fc);
+      });
       bg.on('pointerdown', () => this.pickDraft(i));
       this.draftGroup.add(card);
       this.draftCards.push(card);
@@ -302,15 +307,25 @@ export class UIScene extends Phaser.Scene {
 
   showDraft(payload) {
     const opts = payload.options || [];
+    const elite = !!payload.elite;
+    const frameColor = elite ? 0xffd54a : 0x3a4868;
+    const hoverColor = elite ? 0xffe98a : 0xffd54a;
+    const titleColor = elite ? '#ffd54a' : '#ffe2a8';
     for (let i = 0; i < this.draftCards.length; i++) {
       const c = this.draftCards[i];
       const opt = opts[i];
       if (!opt) { c.setVisible(false); continue; }
       c.setVisible(true);
       c.ttl.setText(opt.title);
+      c.ttl.setColor(titleColor);
       c.dsc.setText(opt.desc);
       c.idx.setText(`[ ${i + 1} ]`);
+      c.bg.setStrokeStyle(elite ? 3 : 2, frameColor);
+      c._frameColor = frameColor;   // remember so pointerout restores it
+      c._hoverColor = hoverColor;
     }
+    this.draftTitle.setText(elite ? 'BOSS REWARD - ELITE UPGRADE' : 'CHOOSE AN UPGRADE');
+    this.draftTitle.setColor(titleColor);
     this.draftGroup.setVisible(true);
     // If a normal pause overlay was up, hide it - the draft is its own pause.
     this.pauseGroup.setVisible(false);

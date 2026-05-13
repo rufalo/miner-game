@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import {
   COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
-  EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO, DRAFT,
+  EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO, DRAFT, BOSS, BIOME,
 } from '../config.js';
 import { Player } from '../entities/Player.js';
 import { BodyPart } from '../entities/BodyPart.js';
@@ -160,6 +160,7 @@ export class GameScene extends Phaser.Scene {
       kills: 0,
       maxTier: 0,
       partsAttached: 0,
+      bossesDefeated: 0,
     };
     this.paused = false;
     this.deathHandled = false;
@@ -224,6 +225,20 @@ export class GameScene extends Phaser.Scene {
     this.add.tileSprite(0, 0, WORLD.size, WORLD.size, 'bg_tile')
       .setOrigin(0, 0)
       .setDepth(-100);
+
+    // Per-tier biome tint as filled annuli drawn just above the tile background
+    // but beneath everything else. Painted from outside-in so inner tiers cover
+    // outer fills correctly.
+    const biomeG = this.add.graphics();
+    biomeG.setDepth(-95);
+    const cxBg = WORLD.size / 2;
+    const cyBg = WORLD.size / 2;
+    for (let t = TIER.maxTier; t >= 1; t--) {
+      const tint = BIOME.tierColors[(t - 1) % BIOME.tierColors.length];
+      const outer = TIER.safeRadius + t * TIER.ringWidth;
+      biomeG.fillStyle(tint, BIOME.ringAlpha);
+      biomeG.fillCircle(cxBg, cyBg, outer);
+    }
 
     // Concentric tier rings
     const ringG = this.add.graphics();
@@ -774,6 +789,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   onEnemyKilled(enemy) {
+    this.stats.kills++;
+
+    if (enemy.isBoss) {
+      this.onBossKilled(enemy);
+      return;
+    }
+
     // Drop a small mineral worth ~3
     const colors = COLOR_KEYS;
     const dropColor = Phaser.Utils.Array.GetRandom(colors);
@@ -784,14 +806,50 @@ export class GameScene extends Phaser.Scene {
       dropColor, value
     );
 
-    this.stats.kills++;
-
     // Particle puff
     const puff = this.add.circle(enemy.x, enemy.y, 16, 0xffffff, 0.8);
     this.tweens.add({
       targets: puff, scale: 2, alpha: 0, duration: 280,
       onComplete: () => puff.destroy(),
     });
+  }
+
+  /**
+   * Boss-specific reward: dramatic explosion, scattered high-value minerals
+   * (one of each primary color), a banner, and a guaranteed draft pick on top
+   * of the normal counter (does NOT consume `evolutionsSinceLastDraft`).
+   */
+  onBossKilled(boss) {
+    this.stats.bossesDefeated++;
+
+    // Big explosion + camera flair.
+    this.spawnExplosion(boss.x, boss.y, 140);
+    this.cameras.main.flash(280, 255, 220, 180, false);
+    this.cameras.main.shake(220, 0.008);
+
+    // Scatter one high-value mineral of each color around the death point.
+    const drops = COLOR_KEYS.slice(0, BOSS.mineralDropCount);
+    drops.forEach((color, i) => {
+      const a = (i / drops.length) * Math.PI * 2 + Math.random() * 0.4;
+      const r = BOSS.mineralScatterPx * (0.6 + Math.random() * 0.6);
+      const x = boss.x + Math.cos(a) * r;
+      const y = boss.y + Math.sin(a) * r;
+      const value = Phaser.Math.Between(BOSS.mineralValueMin, BOSS.mineralValueMax);
+      this.spawner.spawnMineral(x, y, color, value);
+    });
+
+    this.flashWaveBanner(`TIER ${boss.tier} BOSS DEFEATED`);
+
+    // Guaranteed draft pick (independent of the evolution counter). If one is
+    // already open, this one will fire after the player picks the current one.
+    if (!this.pendingDraft) {
+      this.openDraft();
+    } else {
+      // Queue: schedule a check shortly after the current draft might close.
+      this.time.delayedCall(200, () => {
+        if (!this.pendingDraft) this.openDraft();
+      });
+    }
   }
 
   /**
@@ -815,9 +873,10 @@ export class GameScene extends Phaser.Scene {
 
   saveBestRun(current) {
     const best = this.loadBestRun();
-    // Composite score: minerals + kills*5 + tier*100 + time bonus.
+    // Composite score: minerals + kills*5 + bosses*200 + tier*100 + time bonus.
     const score = (s) =>
-      (s.mineralsMined || 0) + (s.kills || 0) * 5 + (s.maxTier || 0) * 100 +
+      (s.mineralsMined || 0) + (s.kills || 0) * 5 +
+      (s.bossesDefeated || 0) * 200 + (s.maxTier || 0) * 100 +
       Math.floor((s.msAlive || 0) / 5000);
     if (!best || score(current) > score(best)) {
       try { localStorage.setItem(BEST_RUN_KEY, JSON.stringify(current)); } catch (_) {}

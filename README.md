@@ -85,6 +85,24 @@ Card categories include:
 
 Cards that don't apply (e.g. "Fuse Lowest 2 Tail" when you have <2 tail segments) are filtered out of the pool.
 
+## Tier mini-bosses
+
+Each of the 4 outer tier rings has a seeded **boss** at ~85% of the way to the outer edge, placed at a different compass heading per tier. Bosses sit idle until you close to ~760 px, then start pursuing and alternating **two telegraphed attacks**:
+
+- **Ring shot** — a halo expands for ~0.7 s, then a wide spread of bullets fires outward.
+- **Missile barrage** — a yellow telegraph for ~0.9 s, then a fan of homing missiles launches at you.
+
+Below 30% HP a boss goes **BERSERK** (nearly 2× speed, attacks ~35% faster). On the minimap they show as bright red diamonds.
+
+**Reward for defeating a boss**:
+
+- Big explosion + camera flash.
+- One high-value mineral of each primary color (R / G / B / Y) scattered around the corpse.
+- A **guaranteed draft pick** independent of the regular evolution counter.
+- Counted in your run stats + best run (`+200` to the best-run score).
+
+The world background also has a subtle **biome tint** per tier so you feel each ring you cross.
+
 ## Threats
 
 Two kinds of pressure:

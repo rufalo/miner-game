@@ -349,6 +349,56 @@ export const DRAFT = {
   optionCount: 3,
 };
 
+/**
+ * Tier mini-boss anchored to each outer ring (tiers 1..maxTier). One per tier
+ * at run-seed time. Defeating a boss drops a guaranteed draft pick and a
+ * burst of high-value minerals. Stats scale by tier.
+ */
+export const BOSS = {
+  baseHP: 260,
+  hpPerTier: 220,
+  speed: 60,
+  berserkSpeedMult: 1.9,
+  berserkHpRatio: 0.30,           // <= 30% HP enters berserk
+
+  aggroRange: 760,
+  displaySize: 70,
+
+  contactDamage: 18,
+  contactCooldownMs: 700,
+
+  // Ring shot
+  ringFireIntervalMs: 4200,
+  ringBulletCount: 10,
+  ringBulletSpeed: 280,
+  ringBulletDamage: 6,
+  ringTelegraphMs: 700,
+
+  // Missile barrage
+  barrageIntervalMs: 6500,
+  barrageMissileCount: 3,
+  barrageMissileDamage: 14,
+  barrageMissilePartValue: 4,
+  barrageTelegraphMs: 900,
+
+  // Reward
+  mineralValueMin: 12,
+  mineralValueMax: 16,
+  mineralDropCount: 4,            // one per primary color (R/G/B/Y)
+  mineralScatterPx: 80,
+};
+
+/**
+ * Subtle background tint per tier so the player feels progression outward.
+ * Tier 0 (safe zone) is just the world background; tiers 1..N are drawn
+ * as concentric rings beneath the grid.
+ */
+export const BIOME = {
+  // Hex tints (RGB blended onto WORLD.background at low alpha).
+  tierColors: [0x0a1422, 0x141026, 0x261020, 0x261812],
+  ringAlpha: 0.55,
+};
+
 export const HUD = {
   barWidth: 160,
   barHeight: 14,

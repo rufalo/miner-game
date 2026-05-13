@@ -30,6 +30,7 @@ export class BootScene extends Phaser.Scene {
     this.makeEnemyTex('enemy_brute',   0xff5555, 'hex');
     this.makeEnemyTex('enemy_hunter',  0xff2a2a, 'spike');
     this.makeEnemyTex('enemy_swarmer', 0xffe14a, 'circle');
+    this.makeBossTex('enemy_boss',     0xff3a3a);
 
     this.scene.start('GameScene');
     this.scene.launch('UIScene');
@@ -158,6 +159,50 @@ export class BootScene extends Phaser.Scene {
         break;
       }
     }
+    g.generateTexture(key, size, size);
+    g.destroy();
+  }
+
+  /** Big chunky gear/boss silhouette. */
+  makeBossTex(key, color) {
+    const size = 128;
+    const half = size / 2;
+    const g = this.add.graphics({ x: 0, y: 0, add: false });
+
+    // Outer ring with notches. Keep everything inside the canvas.
+    g.fillStyle(color, 1);
+    g.lineStyle(4, 0x111722, 1);
+    const outerPts = [];
+    const teeth = 12;
+    const outerR = half - 12;
+    const toothR = half - 4;
+    for (let i = 0; i < teeth * 2; i++) {
+      const a = (i / (teeth * 2)) * Math.PI * 2;
+      const r = (i % 2 === 0) ? toothR : outerR;
+      outerPts.push({ x: half + Math.cos(a) * r, y: half + Math.sin(a) * r });
+    }
+    g.fillPoints(outerPts, true);
+    g.strokePoints(outerPts, true);
+
+    // Inner core ring.
+    g.fillStyle(0x111722, 1);
+    g.fillCircle(half, half, outerR * 0.6);
+
+    // Hex core.
+    g.fillStyle(color, 1);
+    g.lineStyle(3, 0x111722, 1);
+    const corePts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      corePts.push({ x: half + Math.cos(a) * (outerR * 0.5), y: half + Math.sin(a) * (outerR * 0.5) });
+    }
+    g.fillPoints(corePts, true);
+    g.strokePoints(corePts, true);
+
+    // Central "eye".
+    g.fillStyle(0xffffff, 0.95);
+    g.fillCircle(half, half, outerR * 0.18);
+
     g.generateTexture(key, size, size);
     g.destroy();
   }

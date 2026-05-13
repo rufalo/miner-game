@@ -439,6 +439,24 @@ export class UIScene extends Phaser.Scene {
       g.fillCircle(e.x * k, e.y * k, isHunter ? 2.5 : 1.5);
     }
 
+    // Bosses (large red diamonds, very visible).
+    for (const e of enemies) {
+      if (!e.active || !e.isBoss) continue;
+      const bx = e.x * k;
+      const by = e.y * k;
+      const s = 5;
+      g.fillStyle(0xff3a3a, 1);
+      g.lineStyle(1, 0xffffff, 0.9);
+      g.beginPath();
+      g.moveTo(bx, by - s);
+      g.lineTo(bx + s, by);
+      g.lineTo(bx, by + s);
+      g.lineTo(bx - s, by);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+    }
+
     // Pickups (color dots)
     const pickups = this.gs.pickups?.getChildren?.() ?? [];
     for (const pk of pickups) {
@@ -476,6 +494,7 @@ export class UIScene extends Phaser.Scene {
       `time alive       ${formatTime(f.msAlive)}`,
       `minerals mined   ${Math.floor(f.mineralsMined)}`,
       `enemies killed   ${f.kills}`,
+      `bosses defeated  ${f.bossesDefeated ?? 0}`,
       `max tier         ${f.maxTier}`,
       `parts attached   ${f.partsAttached}`,
       ``,
@@ -483,6 +502,7 @@ export class UIScene extends Phaser.Scene {
       `  time           ${formatTime(best.msAlive)}`,
       `  minerals       ${Math.floor(best.mineralsMined)}`,
       `  kills          ${best.kills}`,
+      `  bosses         ${best.bossesDefeated ?? 0}`,
       `  max tier       ${best.maxTier}`,
     ];
     if (payload.isNewBest) lines.push('', 'NEW BEST RUN!');

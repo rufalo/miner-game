@@ -13,7 +13,7 @@ A grouped, prioritized list of feature ideas for the game. Each entry is tagged 
 The biggest weak point right now is "what am I working toward?". Adding any one of these gives the loop direction.
 
 - **Player XP / level** based on minerals mined and enemies killed — unlocks more chain slots, base stats, or new body-part colors. **M**
-- **Boss arenas** per tier — a fixed boss at the center of each tier ring that drops a guaranteed top-tier body part. **L**
+- **Boss arenas** per tier — implemented as tier mini-bosses (see §17).
 - **Win condition / endgame** — destroy a "core" deep in tier 4, or survive a final wave. Without one, mining feels endless. **M**
 - **Persistence between runs** — save best run, total minerals collected, parts attached, etc. via `localStorage`. **S**
 - **Daily seed mode** — fixed world layout per day to compare scores. **S**
@@ -169,6 +169,31 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
   - **rapid** (blue + green): very high fire-rate weak bullets
 - **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
 - **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.
+
+## 17. Implemented: Tier mini-bosses + biome tinting
+
+Each tier ring (1..maxTier) has a single seeded **boss** placed at ~85% of the way to the outer ring, on a different compass heading per tier so they're spread around the world.
+
+- **BossEnemy** ([`src/entities/enemies/BossEnemy.js`](src/entities/enemies/BossEnemy.js))
+  - Stats scale with tier: `BOSS.baseHP + BOSS.hpPerTier * tier` (tier 1 = 480 HP, tier 4 = 1140 HP at current tuning), `contactDamage` 18 with a 700 ms cooldown.
+  - Idle until the player closes within `BOSS.aggroRange` (760 px). From then on, slowly pursues.
+  - Two telegraphed attack patterns:
+    - **Ring shot**: a soft halo expands for ~700 ms, then `BOSS.ringBulletCount + floor(tier/2)` bullets fire outward at evenly spaced angles.
+    - **Missile barrage**: a yellow telegraph for ~900 ms, then `BOSS.barrageMissileCount + floor(tier/2)` homing missiles fan toward the player.
+  - **BERSERK** below `BOSS.berserkHpRatio` HP (30%): speed × `BOSS.berserkSpeedMult` (1.9), attacks come 35% faster, a banner + camera shake announces the phase.
+  - Each boss carries its own floating HP bar + "TIER N BOSS" label drawn above the sprite, visible whenever the boss is on screen.
+- **Spawner.seedBosses()** ([`src/systems/Spawner.js`](src/systems/Spawner.js)) places them once at world seed; they're added to the regular `enemies` group so existing bullet/missile overlaps and AI scaffolding work without changes.
+- **Reward** ([`GameScene.onBossKilled`](src/scenes/GameScene.js)):
+  - Big explosion + camera flash + shake.
+  - One high-value mineral (value 12–16) of each primary color scattered around the corpse.
+  - Banner: `TIER N BOSS DEFEATED`.
+  - **Guaranteed draft pick** queued immediately, independent of the regular `evolutionsSinceLastDraft` counter — so killing a boss is always rewarded with a strategic choice.
+- **Minimap**: bosses render as bright red diamonds (slightly larger than the hunter / swarmer dots) so the player can navigate toward them deliberately.
+- **Run stats / best run**: `stats.bossesDefeated` is tracked, shown on the death recap, and weighted heavily in the best-run score (`+200 per boss kill`).
+
+### Biome tinting
+
+Subtle per-tier background tints (`BIOME.tierColors`, drawn as semi-transparent filled annuli at depth -95) so each ring has its own color mood instead of the whole 16000-px world being flat black. Inner rings paint over outer ones from the outside in. Tuned to be a hint of color, not a wall.
 
 ## 16. Implemented: Draft-pick (pick 3) system
 

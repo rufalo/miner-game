@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { MINERAL, PICKUP, TIER, ENEMY, COLOR_KEYS } from '../config.js';
 import { MineralDeposit } from '../entities/MineralDeposit.js';
 import { BodyPartPickup } from '../entities/BodyPartPickup.js';
+import { BossEnemy } from '../entities/enemies/BossEnemy.js';
 
 // Owns mineral/pickup/enemy zone seeding and respawn-elsewhere behavior.
 export class Spawner {
@@ -9,6 +10,7 @@ export class Spawner {
     this.scene = scene;
     this.tiers = tiers;
     this.zones = []; // { x, y, tier, enemies: [], anchorDeposit }
+    this.bosses = []; // BossEnemy instances spawned at world seed
   }
 
   /**
@@ -18,6 +20,26 @@ export class Spawner {
     this.seedInnerMinerals();
     this.seedInnerPickups();
     this.seedOuterZones();
+    this.seedBosses();
+  }
+
+  /**
+   * One boss per tier ring at a fixed angle (rotated by tier so they don't
+   * line up on the same compass heading) at the outer edge of the ring.
+   */
+  seedBosses() {
+    for (let tier = 1; tier <= TIER.maxTier; tier++) {
+      const ringOuter = TIER.safeRadius + tier * TIER.ringWidth;
+      // Bosses sit ~85% of the way out into their ring.
+      const r = ringOuter - TIER.ringWidth * 0.15;
+      // Rotate by tier so each boss is on a different compass heading.
+      const angle = (tier - 1) * (Math.PI * 2 / TIER.maxTier) + Math.PI / TIER.maxTier;
+      const x = this.scene.worldCenter.x + Math.cos(angle) * r;
+      const y = this.scene.worldCenter.y + Math.sin(angle) * r;
+      const boss = new BossEnemy(this.scene, x, y, tier);
+      this.scene.enemies.add(boss);
+      this.bosses.push(boss);
+    }
   }
 
   seedInnerMinerals() {

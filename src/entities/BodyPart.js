@@ -205,13 +205,27 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
       // Face the direction of travel (tangent to the orbit).
       this.rotation = this.orbitAngle + Math.PI / 2;
     } else {
-      const s = this.player.getSnakeTrailPoint(BodyPart.trailFloatSeg(this.chainIndex, this.player));
+      const seg = BodyPart.trailFloatSeg(this.chainIndex, this.player);
+      const s = this.player.getSnakeTrailPoint(seg);
       let x = s.x;
       let y = s.y;
       if (this.lateralOffset) {
-        // Perpendicular to the segment tangent: (-ty, tx)
-        x += -s.ty * this.lateralOffset;
-        y +=  s.tx * this.lateralOffset;
+        // s.tx / s.ty come from a SINGLE 12 ms polyline segment, which makes the
+        // tangent wobble between frames and snap at segment boundaries -> visible
+        // lateral flicker for split-tail parts. Smooth it by sampling a point
+        // slightly newer and slightly older on the trail and taking the unit
+        // delta between them. Window ~1.5 units = ~18 ms of player movement.
+        const w = 1.5;
+        const a = this.player.getSnakeTrailPoint(Math.max(0, seg - w));
+        const b = this.player.getSnakeTrailPoint(seg + w);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const tx = dx / len;
+        const ty = dy / len;
+        // Perpendicular to the smoothed tangent: (-ty, tx)
+        x += -ty * this.lateralOffset;
+        y +=  tx * this.lateralOffset;
       }
       this.setPosition(x, y);
     }

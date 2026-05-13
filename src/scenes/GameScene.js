@@ -280,21 +280,30 @@ export class GameScene extends Phaser.Scene {
     const player = this.player;
     player.evolutions[color] = (player.evolutions[color] || 0) + 1;
 
-    const sameColorParts = player.parts.filter(p => p.color === color);
-    const appendMode = sameColorParts.length < EVOLUTION.upgradeAtPartCount;
+    const trail = player.trailParts();
+    const sameColorTrail = trail.filter(p => p.color === color);
+    const appendMode =
+      sameColorTrail.length < EVOLUTION.upgradeAtPartCount &&
+      trail.length < PLAYER.maxTailSegments;
 
     if (appendMode) {
       const value = EVOLUTION.baseValue + (player.evolutions[color] - 1) * EVOLUTION.valuePerEvolution;
-      const part = new BodyPart(this, player, player.trailParts().length, { color, value });
+      const part = new BodyPart(this, player, trail.length, { color, value });
       player.parts.push(part);
       this.bodyParts.add(part);
       this.spawnGrowthFx(player.x, player.y, COLORS[color], 'NEW ' + color.toUpperCase());
     } else {
-      // Upgrade: pick the lowest-value matching part.
-      sameColorParts.sort((a, b) => a.value - b.value);
-      const target = sameColorParts[0];
-      target.upgradeValue(EVOLUTION.upgradeValueIncrement);
-      this.spawnGrowthFx(target.x, target.y, COLORS[color], 'UPGRADE');
+      // Upgrade: weakest same-color trail part, or any trail part if none match.
+      let candidates = sameColorTrail;
+      if (!candidates.length) candidates = trail.slice();
+      candidates.sort((a, b) => a.value - b.value);
+      const target = candidates[0];
+      if (target) {
+        target.upgradeValue(EVOLUTION.upgradeValueIncrement);
+        this.spawnGrowthFx(target.x, target.y, COLORS[color], 'UPGRADE');
+      } else {
+        this.spawnGrowthFx(player.x, player.y, COLORS[color], 'GROWTH');
+      }
     }
 
     player.chainChanged();
@@ -313,8 +322,28 @@ export class GameScene extends Phaser.Scene {
     player.evolutions[colorA] = (player.evolutions[colorA] || 0) + 1;
     player.evolutions[colorB] = (player.evolutions[colorB] || 0) + 1;
 
+    const trail = player.trailParts();
+    if (trail.length >= PLAYER.maxTailSegments) {
+      // Tail full: still consume both gauges / evolutions, but upgrade instead of appending.
+      const HYBRID_KINDS = new Set(['plasma', 'swarm', 'rapid']);
+      const hybrids = trail.filter(p => HYBRID_KINDS.has(p.kind));
+      let candidates = hybrids.length ? hybrids : trail.slice();
+      candidates.sort((a, b) => a.value - b.value);
+      const target = candidates[0];
+      if (target) {
+        target.upgradeValue(EVOLUTION.upgradeValueIncrement);
+        this.spawnGrowthFx(target.x, target.y, hybrid.tint, hybrid.label + ' UP');
+      } else {
+        this.spawnGrowthFx(player.x, player.y, hybrid.tint, hybrid.label + ' !');
+      }
+      this.cameras.main.flash(160, 255, 255, 255, false);
+      player.chainChanged();
+      this.checkCombos();
+      return;
+    }
+
     const value = EVOLUTION.baseValue + 2;
-    const part = new BodyPart(this, player, player.trailParts().length, {
+    const part = new BodyPart(this, player, trail.length, {
       color: hybrid.kind,
       kind: hybrid.kind,
       tint: hybrid.tint,

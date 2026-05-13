@@ -267,8 +267,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.historyTimer -= PLAYER.historyPushIntervalMs;
       this.history.unshift({ x: this.x, y: this.y });
       const spacing = PLAYER.segmentSpacingFrames;
+      const tailLen = this.trailParts().length;
       const maxLen =
-        (this.parts.length + 2) * spacing + PLAYER.historyHeadroom;
+        (tailLen + 2) * spacing + PLAYER.historyHeadroom;
       if (this.history.length > maxLen) this.history.length = maxLen;
     }
 

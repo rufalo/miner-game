@@ -183,10 +183,11 @@ Body parts can now auto-combine and adopt different follow patterns than the bas
 - **RAINBOW (PRISM)** — once all four primary colors (R, G, B, Y) exist anywhere in the chain, a one-shot **PRISM orbital** spawns at ~78 px radius and ~1 rad/s.
   - Fires 4 bullets in a small fan, each tinted one of the four primary colors.
   - Sprite cycles through the four primary tints to advertise its presence.
-- **BRANCH (split-tail)** — once the trail has `COMBO.branchAtParts` (6) trail-mode parts attached, the chain unlocks split-tail mode:
+- **BRANCH (split-tail)** — once the trail has `COMBO.branchAtParts` trail-mode parts attached, the chain unlocks split-tail mode:
   - All trail parts past the threshold receive a lateral offset perpendicular to the trail tangent, alternating left / right.
   - Visually the tail splits into two parallel ribbons trailing behind the snake.
   - New growth keeps alternating sides, so the more you grow the wider the split.
+  - Tuned with a small default **max tail** (`PLAYER.maxTailSegments`, default 4): `branchAtParts` is set so split-tail kicks in early enough to be visible before you hit the cap.
 - **Follow modes** are now first-class on `BodyPart`:
   - `'trail'` — the original snake polyline; supports `lateralOffset` for branching.
   - `'orbit'` — circles the player at a fixed radius and angular speed (used by STACK twins and the PRISM).

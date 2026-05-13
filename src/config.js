@@ -47,6 +47,13 @@ export const PLAYER = {
   basePulseFireRate: 1.7,         // shots / second
   basePulseDamage: 6,
   basePulseRange: 360,
+
+  /**
+   * Max trail (snake) segments: parts with followMode === 'trail'.
+   * Orbitals / PRISM do not count. Past this cap, evolutions upgrade existing
+   * trail parts instead of appending. Tune up later via meta / upgrades.
+   */
+  maxTailSegments: 4,
 };
 
 export const GREEN = {
@@ -305,7 +312,10 @@ export const HUNTER = {
  *              split-tail (visual offset, no extra parts).
  */
 export const COMBO = {
-  branchAtParts: 6,                  // chain length that unlocks the split-tail
+  // First `branchAtParts` trail indices stay on the spine; higher indices get
+  // alternating lateral offset. With a small max tail (4), use 2 so the last
+  // two segments visibly split before you hit the cap.
+  branchAtParts: 2,
   branchLateralPx: 26,               // perpendicular offset of branched parts
 
   stackFireRateMult: 1.55,           // orbital twin fires this much faster

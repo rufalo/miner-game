@@ -244,8 +244,10 @@ export class UIScene extends Phaser.Scene {
     if (counts.prism > 0) comboBits.push('PRISM');
     if (p.branchMode) comboBits.push('SPLIT');
     const comboLine = comboBits.length ? `   [${comboBits.join(' ')}]` : '';
+    const trailLen = p.trailParts().length;
+    const tailCap = PLAYER.maxTailSegments;
     this.partsText.setText(
-      `parts  R:${counts.red}  G:${counts.green}  B:${counts.blue}  Y:${counts.yellow}${hybridLine}${comboLine}`
+      `parts  R:${counts.red}  G:${counts.green}  B:${counts.blue}  Y:${counts.yellow}   tail ${trailLen}/${tailCap}${hybridLine}${comboLine}`
     );
   }
 

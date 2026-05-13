@@ -52,6 +52,7 @@ Cargo bars are **evolution gauges**. Walk next to a mineral deposit to auto-mine
 
 - **Under 3 parts of that color attached** → a new segment of that color is appended to your snake.
 - **3 or more attached** → the system upgrades your weakest matching part instead (bigger, more HP, stronger weapon).
+- **Tail cap** — you can only have **`PLAYER.maxTailSegments` trail segments** (default 4). Orbitals from combos do not count. When the tail is full, new evolutions **upgrade** an existing trail part instead of lengthening the snake. Raise the cap later via meta / upgrades (constant lives in `src/config.js`).
 - **If another gauge is at 80%+** when one pops, both drain and a **hybrid part** is spawned:
   - **PLASMA** (blue + red) — slow, very heavy single shot at long range.
   - **SWARM** (green + red) — rapid small homing missiles.

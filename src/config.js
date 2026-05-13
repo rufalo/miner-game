@@ -116,21 +116,21 @@ export const BODY_PART = {
  *    are consumed and a HYBRID part is spawned (recipes in HYBRIDS below).
  */
 export const EVOLUTION = {
-  baseThreshold: 12,              // first evolution of a color needs this much
-  thresholdPerEvolution: 7,       // each evolution of that color makes the next cost more
+  baseThreshold: 16,              // first evolution of a color needs this much
+  thresholdPerEvolution: 10,      // each evolution of that color makes the next cost more
   /**
    * Global ramp: each evolution event (append OR upgrade, any color) also
    * bumps the threshold of every gauge by this much. Compounds with the
    * per-color ramp above so even repeatedly upgrading the same color makes
    * the whole snake harder to grow further.
    */
-  thresholdPerGlobalEvolution: 3,
+  thresholdPerGlobalEvolution: 5,
   upgradeAtPartCount: 3,          // past this many same-color parts, upgrades instead
   upgradeValueIncrement: 2,       // how much value an upgrade adds to the chosen part
   baseValue: 4,                   // starting `value` of a new evolution part
   valuePerEvolution: 1,           // +value for each prior evolution of the color
   hybridGaugeMin: 0.8,            // partner gauge must be at >= 80% to fuse
-  preferredMineMultiplier: 1.5,   // when this color is "preferred" (keys 1-4)
+  preferredMineMultiplier: 1.35,  // when this color is "preferred" (keys 1-4)
   yellowThresholdReduction: 0.04, // each yellow part reduces all thresholds by 4%
   yellowReductionCap: 0.45,       // hard cap at 45% reduction
   haloThreshold: 0.8,             // visual halo + glow starts at this gauge ratio
@@ -221,10 +221,10 @@ export const TIER = {
 };
 
 export const ENEMY = {
-  /** Fewer zones per ring so clusters sit farther apart on the bigger map. */
-  zonesPerTier: 5,
-  enemiesPerZoneMin: 2,
-  enemiesPerZoneMax: 3,
+  /** Zones per ring. Higher = more clusters around each ring. */
+  zonesPerTier: 7,
+  enemiesPerZoneMin: 3,
+  enemiesPerZoneMax: 5,
   // shared
   aggroRange: 360,
   deAggroRange: 720,
@@ -286,26 +286,26 @@ export const ENEMY = {
  */
 export const HUNTER = {
   /** Target = base + perMinute * elapsedMinutes + perTier * maxTier (clamped). */
-  baseCount: 1,
-  perMinute: 0.6,
-  perTier: 0.5,
-  maxCount: 9,
+  baseCount: 2,
+  perMinute: 0.9,
+  perTier: 0.7,
+  maxCount: 14,
 
   /** Min ms between hunter spawn attempts (when below target). */
-  spawnIntervalMs: 9000,
-  spawnIntervalMinMs: 3000,
+  spawnIntervalMs: 7000,
+  spawnIntervalMinMs: 2500,
   spawnIntervalDropPerTier: 800,
 
   /** Distance off-screen to spawn hunters (units). */
   spawnDistance: 720,
 
   /** Periodic swarmer wave. */
-  swarmIntervalMinMs: 45000,
-  swarmIntervalMaxMs: 75000,
-  swarmFirstWaveDelayMs: 30000,
-  swarmCountMin: 4,
-  swarmCountMax: 7,
-  swarmTierBonus: 1,              // +N swarmers per tier reached
+  swarmIntervalMinMs: 35000,
+  swarmIntervalMaxMs: 60000,
+  swarmFirstWaveDelayMs: 25000,
+  swarmCountMin: 5,
+  swarmCountMax: 9,
+  swarmTierBonus: 2,              // +N swarmers per tier reached
 };
 
 /**
@@ -345,7 +345,7 @@ export const COMBO = {
  * and offers the player `optionCount` random upgrade / maintenance cards.
  */
 export const DRAFT = {
-  everyNEvolutions: 3,
+  everyNEvolutions: 5,            // one draft pick every 5 growth events
   optionCount: 3,
 };
 

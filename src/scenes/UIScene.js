@@ -549,6 +549,27 @@ export class UIScene extends Phaser.Scene {
       } else if (key === 'enemy_splitter') {
         g.fillStyle(0xff8a44, 0.95);
         g.fillCircle(e.x * k, e.y * k, 2.5);
+      } else if (key === 'neutral_miner') {
+        // Teal dot while peaceful, hot red while enraged.
+        const peaceful = e.neutral !== false;
+        g.fillStyle(peaceful ? 0x8aa6cf : 0xff5252, 0.95);
+        g.fillCircle(e.x * k, e.y * k, peaceful ? 1.5 : 2.2);
+      }
+    }
+
+    // Landmarks (boulder pits): brown ring on the minimap. Telegraph state
+    // pulses bright orange so the player can see one's about to fire.
+    const landmarks = this.gs.landmarks?.getChildren?.() ?? [];
+    for (const lm of landmarks) {
+      if (!lm.active) continue;
+      const lx = lm.x * k;
+      const ly = lm.y * k;
+      const isFiring = lm.state === 'telegraph';
+      g.lineStyle(2, isFiring ? 0xff6a3a : 0x8a6040, isFiring ? 1 : 0.85);
+      g.strokeCircle(lx, ly, 3.5);
+      if (isFiring) {
+        g.fillStyle(0xff6a3a, 0.6);
+        g.fillCircle(lx, ly, 1.5);
       }
     }
 

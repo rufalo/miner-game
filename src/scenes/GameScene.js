@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import {
   COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
   EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO, DRAFT, BOSS, BIOME,
-  SHOCKWAVE,
+  SHOCKWAVE, LANDMARK,
 } from '../config.js';
 import { Player } from '../entities/Player.js';
 import { BodyPart } from '../entities/BodyPart.js';
@@ -10,6 +10,7 @@ import { MineralDeposit } from '../entities/MineralDeposit.js';
 import { BodyPartPickup } from '../entities/BodyPartPickup.js';
 import { Bullet } from '../entities/Bullet.js';
 import { Missile } from '../entities/Missile.js';
+import { Boulder } from '../entities/world/Boulder.js';
 import { ChaserEnemy } from '../entities/enemies/ChaserEnemy.js';
 import { DasherEnemy } from '../entities/enemies/DasherEnemy.js';
 import { GunnerEnemy } from '../entities/enemies/GunnerEnemy.js';
@@ -363,6 +364,8 @@ export class GameScene extends Phaser.Scene {
     this.enemyBullets = this.physics.add.group({ runChildUpdate: true });
     this.playerMissiles = this.physics.add.group({ runChildUpdate: true });
     this.enemyMissiles = this.physics.add.group({ runChildUpdate: true });
+    // World features: destructible static landmarks (pits etc).
+    this.landmarks = this.physics.add.group({ runChildUpdate: true });
     this.fx = this.add.group();
 
     // Systems
@@ -385,6 +388,9 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.playerMissiles, this.enemies, this.onMissileHitEnemy, null, this);
     this.physics.add.overlap(this.enemyMissiles, this.player, this.onMissileHitPlayer, null, this);
     this.physics.add.overlap(this.enemyMissiles, this.bodyParts, this.onMissileHitBodyPart, null, this);
+    // Landmarks: player shots can damage them. They're inert otherwise.
+    this.physics.add.overlap(this.playerBullets, this.landmarks, this.onBulletHitLandmark, null, this);
+    this.physics.add.overlap(this.playerMissiles, this.landmarks, this.onMissileHitLandmark, null, this);
 
     this.lastTickAt = 0;
   }
@@ -1119,6 +1125,87 @@ export class GameScene extends Phaser.Scene {
   onMissileHitBodyPart(missile, part) {
     if (!missile.active || !part.active) return;
     missile.explode();
+  }
+
+  // --- World feature handlers ---
+
+  onBulletHitLandmark(bullet, landmark) {
+    if (!bullet.active || !landmark.active) return;
+    // Reuse the same per-bullet hit tracking we use for enemies so piercing
+    // shots don't drain the pit multiple times per frame.
+    if (bullet._hits) {
+      if (bullet._hits.has(landmark)) return;
+    } else {
+      bullet._hits = new Set();
+    }
+    bullet._hits.add(landmark);
+    landmark.takeDamage?.(bullet.damage);
+    this.spawnDamageText(landmark.x, landmark.y - landmark.displayHeight / 2, bullet.damage, 'enemy');
+    if ((bullet.pierceLeft || 0) > 0) {
+      bullet.pierceLeft--;
+    } else {
+      bullet.destroy();
+    }
+  }
+
+  onMissileHitLandmark(missile, _landmark) {
+    if (!missile.active) return;
+    missile.explode(); // AoE will damage everything in range including the landmark
+  }
+
+  /**
+   * Launches a Boulder projectile from a pit at (sx, sy) toward (tx, ty).
+   * Called by BoulderPit.fireBoulder. Boulder handles its own arc + impact.
+   */
+  spawnBoulder(sx, sy, tx, ty, tier = 0) {
+    return new Boulder(this, sx, sy, tx, ty, tier);
+  }
+
+  /**
+   * Spawns a small mineral chunk of the given color at (x, y). Used by:
+   *   - NeutralMiner.onDeath drops
+   *   - BoulderPit destruction rewards
+   * Routes through the spawner so it joins the regular `minerals` group and
+   * is mineable by the player + competing neutrals alike.
+   */
+  spawnMineralDrop(x, y, color, value) {
+    return this.spawner?.spawnMineral?.(
+      x + Phaser.Math.Between(-10, 10),
+      y + Phaser.Math.Between(-10, 10),
+      color, value,
+    );
+  }
+
+  /**
+   * Called by a BoulderPit when destroyed. Scatters a small mineral payout
+   * around the crater so blowing one up is a positive economic action.
+   */
+  onLandmarkDestroyed(landmark) {
+    const count = Phaser.Math.Between(LANDMARK.pit.rewardCountMin, LANDMARK.pit.rewardCountMax);
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+      const r = 30 + Math.random() * 50;
+      const color = Phaser.Utils.Array.GetRandom(COLOR_KEYS);
+      const value = Phaser.Math.Between(LANDMARK.pit.rewardValueMin, LANDMARK.pit.rewardValueMax);
+      this.spawnMineralDrop(
+        landmark.x + Math.cos(a) * r,
+        landmark.y + Math.sin(a) * r,
+        color, value,
+      );
+    }
+    this.spawnGrowthFx?.(landmark.x, landmark.y, 0xff9b3a, 'PIT COLLAPSED');
+  }
+
+  /**
+   * NeutralMiner notifies us when its target node is fully drained so the
+   * spawner can roll a replacement, same as when the player empties a node.
+   */
+  onDepositDepleted(deposit) {
+    if (!deposit?.active) return;
+    const color = deposit.color;
+    const x = deposit.x, y = deposit.y;
+    deposit.destroyDeposit();
+    this.spawner?.respawnMineral?.(color, x, y);
   }
 
   onEnemyKilled(enemy) {

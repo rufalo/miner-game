@@ -35,6 +35,11 @@ export class BootScene extends Phaser.Scene {
     this.makeEnemyTex('enemy_bomber',   0xff6a3a, 'mine');
     this.makeBossTex('enemy_boss',      0xff3a3a);
 
+    // World features (landmarks + neutral actors).
+    this.makeLandmarkPit('landmark_pit', 0x6a4a2a);
+    this.makeBoulder('boulder', 0x9a7050);
+    this.makeEnemyTex('neutral_miner', 0x8aa6cf, 'worker');
+
     this.scene.start('GameScene');
     this.scene.launch('UIScene');
   }
@@ -210,7 +215,88 @@ export class BootScene extends Phaser.Scene {
         g.fillCircle(half, half, 4);
         break;
       }
+      case 'worker': {
+        // Neutral miner: circle body with a small pickaxe slash so it reads
+        // as "industrial / not aggressive".
+        g.fillCircle(half, half, half - 6);
+        g.strokeCircle(half, half, half - 6);
+        // Pickaxe-ish slash: a thick rotated rectangle.
+        g.lineStyle(4, 0x111722, 1);
+        g.fillStyle(0x111722, 1);
+        const w = 6, len = half * 0.9;
+        const cx = half - len * 0.35, cy = half - len * 0.35;
+        const ex = half + len * 0.35, ey = half + len * 0.35;
+        g.fillTriangle(cx - w, cy + w, cx + w, cy - w, ex, ey);
+        g.fillTriangle(ex + w, ey - w, ex - w, ey + w, cx, cy);
+        // Bright dot eye so they look "alive" but harmless.
+        g.fillStyle(0xffffff, 0.9);
+        g.fillCircle(half + 6, half - 8, 3);
+        break;
+      }
     }
+    g.generateTexture(key, size, size);
+    g.destroy();
+  }
+
+  /**
+   * Landmark: boulder pit. Dark ring with a crater interior and a few
+   * scattered rocks around the lip, so it reads as "something dangerous lives
+   * here". Tinted at use site via setTint to vary by tier later.
+   */
+  makeLandmarkPit(key, color) {
+    const size = 128;
+    const half = size / 2;
+    const g = this.add.graphics({ x: 0, y: 0, add: false });
+    // Outer rim (lighter)
+    g.fillStyle(color, 1);
+    g.fillCircle(half, half, half - 4);
+    // Inner crater (dark)
+    g.fillStyle(0x111722, 0.95);
+    g.fillCircle(half, half, half - 22);
+    // Rim stroke
+    g.lineStyle(3, 0x111722, 1);
+    g.strokeCircle(half, half, half - 4);
+    // Scattered rocks around the lip
+    g.fillStyle(0x5a4030, 1);
+    g.lineStyle(2, 0x111722, 1);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.3;
+      const r = half - 14;
+      const rx = half + Math.cos(a) * r;
+      const ry = half + Math.sin(a) * r;
+      g.fillCircle(rx, ry, 6 + (i % 2) * 2);
+      g.strokeCircle(rx, ry, 6 + (i % 2) * 2);
+    }
+    // Central faint glow so eruption telegraph reads from the pit.
+    g.fillStyle(0xff6a3a, 0.35);
+    g.fillCircle(half, half, half * 0.35);
+    g.generateTexture(key, size, size);
+    g.destroy();
+  }
+
+  /** Boulder projectile: chunky asteroid silhouette. */
+  makeBoulder(key, color) {
+    const size = 40;
+    const half = size / 2;
+    const g = this.add.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(color, 1);
+    g.lineStyle(2, 0x111722, 1);
+    // Irregular polygon to read as a rock.
+    const pts = [
+      { x: half - 14, y: half - 6 },
+      { x: half - 6,  y: half - 14 },
+      { x: half + 4,  y: half - 16 },
+      { x: half + 14, y: half - 6 },
+      { x: half + 16, y: half + 4 },
+      { x: half + 6,  y: half + 14 },
+      { x: half - 6,  y: half + 16 },
+      { x: half - 16, y: half + 4 },
+    ];
+    g.fillPoints(pts, true);
+    g.strokePoints(pts, true);
+    // Highlights for volume.
+    g.fillStyle(0xffffff, 0.18);
+    g.fillCircle(half - 5, half - 5, 4);
     g.generateTexture(key, size, size);
     g.destroy();
   }

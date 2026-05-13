@@ -121,6 +121,55 @@ export const RED = {
   aoeRadiusPerValue: 4,
 };
 
+/**
+ * Automatic world hazards / authored landmarks. Each tier ring seeds a few
+ * boulder pits that telegraph + lob arcing AoE rocks at the player.
+ *
+ * Pits also damage enemies caught in the AoE - kite hunters/zone enemies
+ * across one and the world fights itself for a moment.
+ */
+export const LANDMARK = {
+  pit: {
+    perTier: 2,                  // boulder pits per tier ring
+    sizePx: 70,
+    aggroRange: 720,             // only fires within this distance of player
+    intervalMin: 5500,           // ms between eruptions
+    intervalMax: 9500,
+    telegraphMs: 1100,           // warning ring lifetime
+    boulderArcMs: 1100,          // flight time start -> impact
+    boulderRadius: 110,          // impact AoE
+    boulderDamage: 22,
+    boulderKnockback: 360,
+    hp: 220,                     // can be destroyed for a mineral reward
+    hpPerTier: 60,
+    rewardCountMin: 3,           // mineral drops on destruction
+    rewardCountMax: 5,
+    rewardValueMin: 4,
+    rewardValueMax: 9,
+  },
+};
+
+/**
+ * Non-hostile actors. Walk around mining deposits like the player. Stay
+ * neutral until attacked, at which point they enrage into a chaser-like
+ * threat. Drop a small mineral chunk on death.
+ */
+export const NEUTRAL = {
+  miner: {
+    perTier: 3,                  // neutral miners seeded per tier ring
+    speed: 90,
+    enragedSpeed: 165,
+    hp: 26,
+    hpPerTier: 8,
+    drainRate: 2.4,              // mineral units / sec drained from deposits
+    drainRange: 18,              // extra reach beyond deposit radius
+    rescanIntervalMs: 1500,
+    enragedDamage: 6,
+    enragedContactCooldownMs: 600,
+    dropMineralValue: 3,
+  },
+};
+
 export const BODY_PART = {
   baseSize: 8,                    // px per side at value 0
   sizePerValue: 2,

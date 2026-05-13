@@ -72,12 +72,14 @@ Remaining ideas:
 
 The bigger world is great but mostly empty between zones. Some content to fill it:
 
-- **Points of interest**: abandoned base, crashed wreck, ancient deposit with rare mineral. **M**
-- **Biomes / visual variety** — change grid color and background per tier so you *feel* progression. **S**
+- ~~**Points of interest**: abandoned base, crashed wreck, ancient deposit with rare mineral.~~ ✅ partial — **boulder pits** seeded per tier (see §19); other POI types still wishlist.
+- **Biomes / visual variety** — change grid color and background per tier so you *feel* progression. **S** (partial: tier tinting is in)
 - **Asteroid fields** — clusters of small obstacles you can shoot through, with hidden minerals inside. **M**
-- **Wandering "caravan" neutral NPC** that trades minerals at non-1:1 ratios. **L**
+- ~~**Wandering "caravan" neutral NPC** that trades minerals at non-1:1 ratios.~~ ✅ partial — **neutral miners** are in (compete with the player for nodes, enrage on attack); proper *trading* NPCs still wishlist.
 - **Hazards** — radiation zones that drain HP, gravity wells that pull the snake. **M**
 - **Map borders that look intentional** — energy wall, not just invisible bounds. **S**
+- **Geysers / sinkholes / crystal fields** — keep building out the landmark menagerie now that the BoulderPit / Boulder pattern is in place. **M**
+- **WorldEvent scheduler** — global timer that fires periodic events ("storm", "migration") with broadcast hooks for systems to react. **L**
 
 ## 6. Economy / minerals
 
@@ -177,6 +179,39 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
   - **rapid** (blue + green): very high fire-rate weak bullets
 - **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
 - **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.
+
+## 19. Implemented: World features (landmarks + neutral miners)
+
+First slice of "the world does things on its own". Two complementary systems, both seeded once by the Spawner and then self-sustaining.
+
+### Boulder pits (`src/entities/world/BoulderPit.js`)
+
+Authored landmarks placed per tier ring at angles offset from bosses.
+
+- **State machine**: `idle -> telegraph -> idle`. Idle pits skip per-frame work via an early-out range check against the player.
+- **Eruption**: when the player enters `LANDMARK.pit.aggroRange`, the pit shows a flashing orange telegraph ring at the player's *current* position for `telegraphMs`, then launches a `Boulder` toward that locked spot. Player has the full telegraph window + flight time to clear the impact zone.
+- **Boulder** (`src/entities/world/Boulder.js`) is a non-physics Phaser image that lerps x/y over `boulderArcMs` with a sine y-offset for the arc, and grows a drop shadow on the ground at the impact target so it stays readable even when the camera moves. On impact: cam shake + explosion FX + AoE damage to player (full), body parts (half), and **enemies in radius (85% damage)** so kiting under one is a real tactic.
+- **Destructible**: pits have HP scaling with tier; player bullets / missiles damage them via `onBulletHitLandmark` / `onMissileHitLandmark`. Destruction scatters 3-5 mineral chunks via `onLandmarkDestroyed`, so blowing them up is a positive economic action.
+- **Minimap**: brown ring while idle, hot orange filled circle the instant they fire.
+
+### Neutral miners (`src/entities/NeutralMiner.js`)
+
+Non-hostile actors that compete with the player for the map's mineral economy.
+
+- Extends `Enemy` so they inherit physics body, takeDamage flash, burn ticks (you can light them on fire), and `onDeath -> scene.onEnemyKilled` for the regular kill bookkeeping.
+- AI swap: **peaceful mode** scans for the nearest `MineralDeposit` every `rescanIntervalMs`, paths to it, then drains via the new `MineralDeposit.drainBy(amount)` method at ~3 Hz. When a node is fully drained the neutral calls `scene.onDepositDepleted(deposit)` which destroys it and triggers the regular spawner respawn flow.
+- **Enrage** on first damage: turns red, speeds up, gets a contact damage value, sets `aggro = true`, and from then on behaves like a chaser via the shared `Enemy.attemptContactDamage` path. So killing one isn't free DPS - they hit back briefly.
+- **Reward on death**: drops a small mineral chunk of a random primary color via `scene.spawnMineralDrop` *and* the standard enemy-kill drop, so the player gets a tangible payout but has to accept the brief hostility.
+- **Minimap**: teal dot while peaceful, hot red while enraged.
+
+### Plumbing
+
+- New physics group `this.landmarks` on `GameScene` with `runChildUpdate: true` so pits tick themselves; player bullets / missiles can overlap-damage it.
+- `Spawner.seedLandmarks()` and `Spawner.seedNeutralMiners()` run once at world seed time; the spawner tracks both lists.
+- Config in [`config.js`](src/config.js): `LANDMARK.pit.*` and `NEUTRAL.miner.*` blocks expose every tunable.
+- BootScene generates three new textures programmatically (`landmark_pit`, `boulder`, `neutral_miner`) so nothing is committed as image assets.
+
+Next-step ideas (kept in §5): geysers / sinkholes / crystal fields reusing the BoulderPit / Boulder skeleton, plus a global `WorldEvent` scheduler that broadcasts hooks (`onDepositDepleted`, `onLandmarkDestroyed`, etc) for other systems to react to.
 
 ## 18. Implemented: Mark tiers + set bonuses
 

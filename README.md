@@ -149,6 +149,29 @@ Below 30% HP a boss goes **BERSERK** (nearly 2× speed, attacks ~35% faster). On
 
 The world background also has a subtle **biome tint** per tier so you feel each ring you cross.
 
+## World features
+
+The world isn't just enemies and minerals — there are **automatic landmarks** and **non-hostile actors** that affect what's happening even when you're not looking.
+
+### Boulder pits (landmarks)
+
+Each tier ring has a few **boulder pits** seeded at fixed angles (offset from the boss positions). They look like dark craters with a faint orange glow.
+
+- **Idle** while you're far away.
+- When you cross into ~720 px of the pit, it picks your current position, plays a **flashing orange telegraph ring** for ~1.1 s, then **lobs a chunky arcing boulder** at that spot. A drop-shadow on the ground tells you where it'll land.
+- **Impact**: AoE damage + knockback to **you, your tail (half damage), and any enemies caught in the blast**. Kiting a hunter swarm under a pit you've already triggered is a real tactic.
+- Pits are **destructible** (~220 HP, scaling with tier). Killing one explodes the crater and scatters **3–5 mineral chunks** as a payout, so blowing them up is a positive economic action.
+- On the minimap they're brown rings; they pulse bright orange the instant they fire.
+
+### Neutral miners
+
+Sprinkled across every ring (and a couple inside the safe zone) are **non-hostile miners**: gray-blue circles with a pickaxe-slash silhouette.
+
+- They **path to the nearest mineral deposit** on their own and **drain it slowly**, competing with you for the world's economy. Let one work uninterrupted and they'll empty a node you wanted.
+- They **stay peaceful unless you attack them**. The first hit immediately **enrages** them — they turn red, speed up, and start hunting you like a chaser.
+- Killing one drops a **small mineral chunk** of a random color *plus* the standard enemy-kill mineral, so they're a meaningful tactical choice: ignore them and you keep the peace, attack them and you get loot but make a new hostile.
+- On the minimap they show as teal dots (peaceful) or hot red dots (enraged).
+
 ## Threats
 
 Two kinds of pressure:

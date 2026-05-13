@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
-import { MINERAL, PICKUP, TIER, ENEMY, COLOR_KEYS } from '../config.js';
+import { MINERAL, PICKUP, TIER, ENEMY, COLOR_KEYS, LANDMARK, NEUTRAL } from '../config.js';
 import { MineralDeposit } from '../entities/MineralDeposit.js';
 import { BodyPartPickup } from '../entities/BodyPartPickup.js';
 import { BossEnemy } from '../entities/enemies/BossEnemy.js';
+import { BoulderPit } from '../entities/world/BoulderPit.js';
+import { NeutralMiner } from '../entities/NeutralMiner.js';
 
 // Owns mineral/pickup/enemy zone seeding and respawn-elsewhere behavior.
 export class Spawner {
@@ -11,6 +13,8 @@ export class Spawner {
     this.tiers = tiers;
     this.zones = []; // { x, y, tier, enemies: [], anchorDeposit }
     this.bosses = []; // BossEnemy instances spawned at world seed
+    this.landmarks = []; // BoulderPit instances
+    this.neutrals = []; // NeutralMiner instances
   }
 
   /**
@@ -21,6 +25,64 @@ export class Spawner {
     this.seedInnerPickups();
     this.seedOuterZones();
     this.seedBosses();
+    this.seedLandmarks();
+    this.seedNeutralMiners();
+  }
+
+  /**
+   * Place `LANDMARK.pit.perTier` boulder pits in each tier ring at evenly
+   * spaced angles, rotated per tier so they don't line up with bosses. Each
+   * pit is anchored ~60-80% of the way out into its ring.
+   */
+  seedLandmarks() {
+    for (let tier = 1; tier <= TIER.maxTier; tier++) {
+      const ringInner = TIER.safeRadius + (tier - 1) * TIER.ringWidth;
+      const ringOuter = TIER.safeRadius + tier * TIER.ringWidth;
+      const count = LANDMARK.pit.perTier;
+      const phase = (tier - 1) * (Math.PI / TIER.maxTier) + 0.7; // offset from bosses
+      for (let i = 0; i < count; i++) {
+        const a = phase + (i / count) * Math.PI * 2 + (Math.random() * 0.4 - 0.2);
+        const r = Phaser.Math.FloatBetween(
+          ringInner + (ringOuter - ringInner) * 0.45,
+          ringInner + (ringOuter - ringInner) * 0.80,
+        );
+        const x = this.scene.worldCenter.x + Math.cos(a) * r;
+        const y = this.scene.worldCenter.y + Math.sin(a) * r;
+        const pit = new BoulderPit(this.scene, x, y, tier);
+        this.scene.landmarks.add(pit);
+        this.landmarks.push(pit);
+      }
+    }
+  }
+
+  /**
+   * Sprinkle neutral miners across each tier ring. They pathfind to the
+   * nearest mineral deposit on their own once active.
+   */
+  seedNeutralMiners() {
+    for (let tier = 1; tier <= TIER.maxTier; tier++) {
+      const ringInner = TIER.safeRadius + (tier - 1) * TIER.ringWidth;
+      const ringOuter = TIER.safeRadius + tier * TIER.ringWidth;
+      for (let i = 0; i < NEUTRAL.miner.perTier; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Phaser.Math.FloatBetween(ringInner + 80, ringOuter - 80);
+        const x = this.scene.worldCenter.x + Math.cos(a) * r;
+        const y = this.scene.worldCenter.y + Math.sin(a) * r;
+        const m = new NeutralMiner(this.scene, x, y, tier);
+        this.scene.enemies.add(m);
+        this.neutrals.push(m);
+      }
+    }
+    // Also a couple inside the safe ring so the player sees one early.
+    for (let i = 0; i < 2; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Phaser.Math.FloatBetween(360, TIER.safeRadius - 120);
+      const x = this.scene.worldCenter.x + Math.cos(a) * r;
+      const y = this.scene.worldCenter.y + Math.sin(a) * r;
+      const m = new NeutralMiner(this.scene, x, y, 0);
+      this.scene.enemies.add(m);
+      this.neutrals.push(m);
+    }
   }
 
   /**

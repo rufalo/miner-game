@@ -67,6 +67,20 @@ export class MineralDeposit extends Phaser.Physics.Arcade.Sprite {
     return false;
   }
 
+  /**
+   * Drain `amount` units from the deposit WITHOUT going through a player.
+   * Used by NeutralMiner actors that compete with the player for nodes.
+   * Returns true if the deposit is fully depleted.
+   */
+  drainBy(amount) {
+    if (this.value <= 0) return true;
+    this.value = Math.max(0, this.value - amount);
+    const frac = Math.max(0.25, this.value / this.startValue);
+    this.setDisplaySize(this.radius * 2 * frac, this.radius * 2 * frac);
+    if (this.halo) this.halo.setDisplaySize(this.radius * 2 * frac + 8, this.radius * 2 * frac + 8);
+    return this.value <= 0.0001;
+  }
+
   destroyDeposit() {
     if (this.halo) this.halo.destroy();
     this.halo = null;

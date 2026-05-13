@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION, DRAFT } from '../config.js';
+import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION, DRAFT, SHOCKWAVE, OVERCHARGE } from '../config.js';
 
 const formatTime = (ms) => {
   const s = Math.floor(ms / 1000);
@@ -66,6 +66,20 @@ export class UIScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '10px', color: '#9aa6bd',
     }).setOrigin(0.5, 0);
 
+    // Active ability cooldown bars (Q + E). Slightly narrower than dash and
+    // stacked under it so the trio reads as one ability column.
+    this.shockBg = this.add.rectangle(0, 0, 120, 5, 0x111722).setOrigin(0.5, 0).setStrokeStyle(1, 0x2a3548);
+    this.shockFill = this.add.rectangle(0, 0, 118, 3, 0xff8a4a).setOrigin(0.5, 0);
+    this.shockLabel = this.add.text(0, 0, 'SHOCKWAVE (Q)', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#9aa6bd',
+    }).setOrigin(0.5, 0);
+
+    this.overBg = this.add.rectangle(0, 0, 120, 5, 0x111722).setOrigin(0.5, 0).setStrokeStyle(1, 0x2a3548);
+    this.overFill = this.add.rectangle(0, 0, 118, 3, 0xffd64a).setOrigin(0.5, 0);
+    this.overLabel = this.add.text(0, 0, 'OVERCHARGE (E)', {
+      fontFamily: 'monospace', fontSize: '10px', color: '#9aa6bd',
+    }).setOrigin(0.5, 0);
+
     // --- Minimap ---
     this.minimap = this.add.container(0, 0);
     this.minimapBg = this.add.rectangle(0, 0, MINIMAP.size, MINIMAP.size, MINIMAP.background, MINIMAP.alpha)
@@ -76,7 +90,7 @@ export class UIScene extends Phaser.Scene {
 
     // --- Tip line ---
     this.tipText = this.add.text(this.scale.width / 2, HUD.margin,
-      'WASD/arrows/mouse  -  Space: dash  -  1-4: prefer color  -  Esc: pause  -  draft picks every few evolutions', {
+      'WASD/arrows  -  Space: dash  -  Q: shockwave  -  E: overcharge  -  1-4: prefer color  -  Esc: pause', {
         fontFamily: 'monospace', fontSize: '11px', color: '#8693ad',
       }).setOrigin(0.5, 0);
 
@@ -177,6 +191,12 @@ export class UIScene extends Phaser.Scene {
     this.dashBg.setPosition(width / 2, HUD.margin + 36);
     this.dashFill.setPosition(width / 2, HUD.margin + 37);
     this.dashLabel.setPosition(width / 2, HUD.margin + 44);
+    this.shockBg.setPosition(width / 2, HUD.margin + 58);
+    this.shockFill.setPosition(width / 2, HUD.margin + 59);
+    this.shockLabel.setPosition(width / 2, HUD.margin + 66);
+    this.overBg.setPosition(width / 2, HUD.margin + 80);
+    this.overFill.setPosition(width / 2, HUD.margin + 81);
+    this.overLabel.setPosition(width / 2, HUD.margin + 88);
 
     this.tipText.setPosition(width / 2, HUD.margin);
     this.tierText.setPosition(HUD.margin, height - HUD.margin - 18);
@@ -226,6 +246,7 @@ export class UIScene extends Phaser.Scene {
     this.updateBars(p);
     this.updateMinimap(p);
     this.updateDash(p, time);
+    this.updateAbilities(p, time);
 
     const dist = Math.hypot(p.x - gs.worldCenter.x, p.y - gs.worldCenter.y);
     const tier = gs.tiers.tierForDistance(dist);
@@ -412,6 +433,52 @@ export class UIScene extends Phaser.Scene {
     this.dashFill.setSize(118 * Math.max(0, Math.min(1, frac)), 3);
     this.dashFill.setFillStyle(ready ? 0xa5d8ff : 0x4a6f99);
     this.dashLabel.setColor(ready ? '#a5d8ff' : '#6c7791');
+  }
+
+  /**
+   * Q (Shockwave) + E (Overcharge) cooldown / active-window bars.
+   * The Overcharge bar serves a double purpose: while the buff is ACTIVE the
+   * bar fills the *duration window* and turns bright; once the buff ends, the
+   * bar drains again from full to refill as cooldown.
+   */
+  updateAbilities(p, time) {
+    const t = time ?? 0;
+
+    // --- Shockwave (Q) ---
+    const qReady = t >= (p.shockwaveReadyAt ?? 0);
+    let qFrac;
+    if (qReady) qFrac = 1;
+    else {
+      const cd = SHOCKWAVE.cooldownMs * (p.boosts?.shockwaveCooldownMult ?? 1);
+      const remaining = Math.max(0, p.shockwaveReadyAt - t);
+      qFrac = 1 - remaining / cd;
+    }
+    this.shockFill.setSize(118 * Math.max(0, Math.min(1, qFrac)), 3);
+    this.shockFill.setFillStyle(qReady ? 0xff8a4a : 0x6b3d22);
+    this.shockLabel.setColor(qReady ? '#ff8a4a' : '#6c7791');
+
+    // --- Overcharge (E) ---
+    const active = t < (p.overchargeUntil ?? 0);
+    if (active) {
+      const dur = OVERCHARGE.durationMs + (p.boosts?.overchargeDurationBonusMs ?? 0);
+      const left = Math.max(0, p.overchargeUntil - t);
+      const f = Math.max(0, Math.min(1, left / dur));
+      this.overFill.setSize(118 * f, 3);
+      this.overFill.setFillStyle(0xffe27a);
+      this.overLabel.setColor('#ffe27a').setText('OVERCHARGED!');
+    } else {
+      const eReady = t >= (p.overchargeReadyAt ?? 0);
+      let frac;
+      if (eReady) frac = 1;
+      else {
+        const cd = OVERCHARGE.cooldownMs * (p.boosts?.overchargeCooldownMult ?? 1);
+        const remaining = Math.max(0, p.overchargeReadyAt - t);
+        frac = 1 - remaining / cd;
+      }
+      this.overFill.setSize(118 * Math.max(0, Math.min(1, frac)), 3);
+      this.overFill.setFillStyle(eReady ? 0xffd64a : 0x6b5722);
+      this.overLabel.setColor(eReady ? '#ffd64a' : '#6c7791').setText('OVERCHARGE (E)');
+    }
   }
 
   updateMinimap(p) {

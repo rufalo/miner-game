@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BODY_PART, COLORS, BLUE, RED, PLAYER, KIND_BY_COLOR, HYBRID_STATS, COMBO } from '../config.js';
+import { BODY_PART, COLORS, BLUE, RED, PLAYER, KIND_BY_COLOR, HYBRID_STATS, COMBO, OVERCHARGE } from '../config.js';
 
 // Tint cycle for the PRISM orbital.
 const PRISM_TINT_CYCLE = [0xff5b6d, 0xffd64a, 0x52d97a, 0x4aa9ff];
@@ -170,6 +170,15 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroyPart() {
+    // "Volatile Tail" draft card: detonate the dying segment in a small AoE
+    // before removing it. Damage scales with the part's `value`.
+    if (this.player?.boosts?.volatileTail && this.scene) {
+      const radius = 110 + this.value * 6;
+      const dmg = 14 + this.value * 3;
+      this.scene.castShockwave?.(this.x, this.y, radius, dmg, {
+        color: this.tint, knockback: 0,
+      });
+    }
     const idx = this.player.parts.indexOf(this);
     if (idx >= 0) this.player.parts.splice(idx, 1);
     // Losing the PRISM allows a future RAINBOW combo to spawn a new one.
@@ -249,36 +258,83 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
     if (!target) return;
 
     const angle = Math.atan2(target.y - this.y, target.x - this.x);
-    weapon.fire(this, target, angle);
-    this.nextFireAt = time + 1000 / this.fireRate;
+
+    // Overcharge window: temporarily bump damage and fire rate. We swap
+    // `damage` for the duration of the fire() call so the existing dispatchers
+    // pick it up without each one having to know about overcharge.
+    const overcharged = this.player && this.scene.time.now < (this.player.overchargeUntil || 0);
+    if (overcharged) {
+      const origDmg = this.damage;
+      this.damage = origDmg * OVERCHARGE.damageMult;
+      try { weapon.fire(this, target, angle); }
+      finally { this.damage = origDmg; }
+      this.nextFireAt = time + 1000 / (this.fireRate * OVERCHARGE.fireRateMult);
+    } else {
+      weapon.fire(this, target, angle);
+      this.nextFireAt = time + 1000 / this.fireRate;
+    }
+  }
+
+  /**
+   * Pulls the current piercing bonus from the player's boosts (defaults to 0).
+   * Read at fire time so newly-granted draft cards take effect immediately.
+   */
+  pierceCount() {
+    return this.player?.boosts?.bulletPierce ?? 0;
+  }
+
+  /**
+   * Volley size for missile-kind parts. Reads `boosts.missileMultishot`. Always
+   * at least 1. Twin Missile sets this to 2; cards could push it higher.
+   */
+  missileCount() {
+    return Math.max(1, this.player?.boosts?.missileMultishot ?? 1);
   }
 
   /** Returns a dispatcher for the current weapon kind, or null for passives. */
   weaponInfo() {
     switch (this.kind) {
       case 'turret':
-        return { fire: (self, _t, a) =>
-          self.scene.spawnBullet(self.x, self.y, a, self.damage, true) };
+        return { fire: (self, _t, a) => {
+          const b = self.scene.spawnBullet(self.x, self.y, a, self.damage, true);
+          if (b) b.pierceLeft = self.pierceCount();
+        } };
       case 'missile':
-        return { fire: (self, t, a) =>
-          self.scene.spawnMissile(self.x, self.y, a, self.damage, self.value, t, true) };
+        return { fire: (self, t, a) => {
+          const n = self.missileCount();
+          // Symmetric fan: 1 -> dead center, 2 -> +/-, 3 -> [-,0,+], ...
+          const spread = 0.18;
+          for (let i = 0; i < n; i++) {
+            const off = n === 1 ? 0 : (i - (n - 1) / 2) * spread;
+            const m = self.scene.spawnMissile(self.x, self.y, a + off, self.damage, self.value, t, true);
+            if (m && self.player?.boosts?.clusterMissiles) m.cluster = true;
+          }
+        } };
       case 'plasma':
-        return { fire: (self, _t, a) =>
-          self.scene.spawnPlasma(self.x, self.y, a, self.damage, self.value) };
+        return { fire: (self, _t, a) => {
+          const b = self.scene.spawnPlasma(self.x, self.y, a, self.damage, self.value);
+          if (b) b.pierceLeft = self.pierceCount();
+        } };
       case 'swarm':
-        return { fire: (self, t, a) =>
-          self.scene.spawnSwarmMissile(self.x, self.y, a, self.damage, self.value, t) };
+        return { fire: (self, t, a) => {
+          const m = self.scene.spawnSwarmMissile(self.x, self.y, a, self.damage, self.value, t);
+          if (m && self.player?.boosts?.clusterMissiles) m.cluster = true;
+        } };
       case 'rapid':
-        return { fire: (self, _t, a) =>
-          self.scene.spawnRapidBullet(self.x, self.y, a, self.damage) };
+        return { fire: (self, _t, a) => {
+          const b = self.scene.spawnRapidBullet(self.x, self.y, a, self.damage);
+          if (b) b.pierceLeft = self.pierceCount();
+        } };
       case 'prism':
         return { fire: (self, _t, a) => {
           const colors = PRISM_TINT_CYCLE;
           const fan = COMBO.prismFanRadians;
+          const pierce = self.pierceCount();
           for (let i = 0; i < 4; i++) {
             const off = (i - 1.5) * (fan / 3);
             const b = self.scene.spawnBullet(self.x, self.y, a + off, self.damage, true);
             b.setTint(colors[i]);
+            if (pierce > 0) b.pierceLeft = pierce;
           }
         } };
       default:

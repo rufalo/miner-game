@@ -40,11 +40,15 @@ The growth loop has been overhauled into an evolution system (see §13) and a co
 
 ## 3. Combat depth
 
-- **Player base weapon** so an HP-1 chainless player isn't defenseless — a weak built-in pulse. **S**
-- **Active ability key** (Space) — short dash with i-frames, scales with green parts. **S**
-- **Weapon upgrade choices** — when a blue or red part hits a milestone (e.g., 3 kills), offer +damage / +fire-rate / +pierce. **M**
+- ~~**Player base weapon** so an HP-1 chainless player isn't defenseless — a weak built-in pulse.~~ ✅ implemented.
+- ~~**Active ability key** (Space) — short dash with i-frames, scales with green parts.~~ ✅ implemented (dash).
+- ~~**Weapon upgrade choices** — when a blue or red part hits a milestone (e.g., 3 kills), offer +damage / +fire-rate / +pierce.~~ ✅ delivered via the draft-pick system + new weapon-mod cards (`Splinter Rounds`, `Twin Missile`, `Cluster Missiles`, `Volatile Tail`).
+- ~~**More active abilities** beyond dash.~~ ✅ implemented:
+  - **Q — Shockwave** (`SHOCKWAVE` in `src/config.js`): radial AoE pulse + outward knockback + brief i-frames. Visualized via `castShockwave` in `GameScene`. ~8 s base cooldown; `Shockwave+` and elite `Resonance Pulse` scale damage / radius / cooldown.
+  - **E — Overcharge** (`OVERCHARGE`): 4 s buff window. Pulse weapon and every body-part weapon read `player.overchargeUntil` and apply `OVERCHARGE.fireRateMult × OVERCHARGE.damageMult`. UI bar shows an active window timer while the buff lasts, then refills as cooldown. `Overcharge+` and elite `Singularity Charge` scale duration / cooldown.
 - **Status effects** — red missiles leave burning ground, green parts apply slow on contact. **M**
 - **Better targeting** — let blue turrets prioritize closest threats (enemies actually shooting you) rather than just nearest. **S**
+- **More active abilities to consider**: targeted teleport / blink, deployable turret, magnet pull for mineral pickups, time-slow burst. **M**
 
 ## 4. Enemies & AI
 

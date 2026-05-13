@@ -21,6 +21,14 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.rotation = angle;
 
     this.lifeUntil = scene.time.now + (friendly ? BLUE.bulletLifeMs : 1400);
+
+    // Piercing: # additional enemies this bullet can hit. The overlap handler
+    // decrements this and only destroys the bullet when it reaches -1. Used by
+    // the "Splinter Rounds" draft card.
+    this.pierceLeft = 0;
+    // Tracks which enemies were already hit so Phaser's per-frame overlap
+    // doesn't double-tap the same target.
+    this._hits = null;
   }
 
   update(time) {

@@ -35,9 +35,20 @@ Then open the URL Vite prints (usually `http://localhost:5173`).
 - **WASD** / **Arrow keys** — move
 - **Hold left mouse** — move toward the cursor
 - **Space** — dash (i-frames, short cooldown)
+- **Q** — **Shockwave** (radial AoE pulse + knockback, ~8 s cooldown, brief i-frames so it doubles as a panic button)
+- **E** — **Overcharge** (4 s buff: 2× fire rate, +20% damage on every weapon, ~18 s cooldown)
 - **1 / 2 / 3 / 4** — prefer a color (red / green / blue / yellow). Mining the preferred color fills its evolution gauge ~1.5× faster.
 - **Esc** — pause / resume
 - **R** — restart (when paused or dead)
+
+## Active abilities
+
+Beyond the always-on weapons, the player has two on-demand abilities. The HUD shows their cooldown bars stacked under the dash bar (orange = Shockwave, gold = Overcharge).
+
+- **Shockwave (Q)** — instant radial AoE around the player. Deals damage to every enemy in `SHOCKWAVE.radius`, applies an outward knockback impulse, and grants ~180 ms of i-frames so it doubles as a panic button. ~8 s cooldown.
+- **Overcharge (E)** — 4 s buff window. **Every** weapon (built-in pulse, turrets, missiles, plasma, swarm, rapid, prism) fires at 2× rate with +20% damage. ~18 s cooldown. The overcharge bar fills as a duration timer while active, then drains as the cooldown refills.
+
+Draft cards (regular and elite) can extend, strengthen, and shorten the cooldown of both abilities.
 
 ## Colors
 
@@ -79,11 +90,13 @@ Every few evolutions (3 by default, tune with `DRAFT.everyNEvolutions`) the game
 
 Card categories include:
 
-- **Passive boosts** — `+20% red damage`, `+20% blue fire rate`, `+25% green speed bonus`, `+5% threshold discount`, `+50% pulse damage`, `+25% pulse fire rate`, `-20% dash cooldown`, `+20 max HP`.
+- **Passive boosts** — `+15% red damage`, `+15% blue fire rate`, `+18% green speed bonus`, `+4% threshold discount`, `+30% pulse damage`, `+18% pulse fire rate`, `-15% dash cooldown`, `+15 max HP`.
+- **Weapon mods (new)** — `Splinter Rounds` (turret / rapid / pulse bullets pierce one extra enemy), `Twin Missile` (missile parts fire 2 missiles per volley), `Cluster Missiles` (missiles spawn 6 shrapnel bullets on impact), `Volatile Tail` (body parts detonate in an AoE blast when destroyed).
+- **Active-ability mods (new)** — `Shockwave+` (+15% Q damage, +10% radius), `Overcharge+` (+1 s buff duration).
 - **Maintenance** — `Full Heal`, `Repair All Parts`, **`Fuse Lowest 2 Tail`** (combine your two weakest tail segments to free a slot), **`Recycle Smallest Tail`** (remove your weakest tail segment to free a slot).
 - **Capacity** — `+1 Max Tail` raises `PLAYER.maxTailSegments` by 1 for this run.
 
-Cards that don't apply (e.g. "Fuse Lowest 2 Tail" when you have <2 tail segments) are filtered out of the pool.
+Cards that don't apply (e.g. "Twin Missile" once you already have it) are filtered out of the pool.
 
 ## Tier mini-bosses
 
@@ -98,7 +111,7 @@ Below 30% HP a boss goes **BERSERK** (nearly 2× speed, attacks ~35% faster). On
 
 - Big explosion + camera flash.
 - One high-value mineral of each primary color (R / G / B / Y) scattered around the corpse.
-- A **guaranteed ELITE draft pick** — gold-framed cards drawn from a boss-only pool with ~2x the magnitude of regular cards (e.g. `+2 Max Tail`, `+35% Red Damage`, `Iron Hide`, `Photonic Surge`, `Phase Shift`, `Tail Genesis`). Maintenance cards (heal / repair / fuse) can still appear so the choice isn't always pure DPS.
+- A **guaranteed ELITE draft pick** — gold-framed cards drawn from a boss-only pool with ~2× the magnitude of regular cards (e.g. `+2 Max Tail`, `+35% Red Damage`, `Iron Hide`, `Photonic Surge`, `Phase Shift`, `Tail Genesis`, **`Tri-Missile Salvo`**, **`Resonance Pulse`**, **`Singularity Charge`**). Maintenance cards (heal / repair / fuse) can still appear so the choice isn't always pure DPS.
 - Counted in your run stats + best run (`+200` to the best-run score).
 
 The world background also has a subtle **biome tint** per tier so you feel each ring you cross.

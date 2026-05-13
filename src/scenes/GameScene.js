@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
   EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO, DRAFT, BOSS, BIOME,
+  SHOCKWAVE,
 } from '../config.js';
 import { Player } from '../entities/Player.js';
 import { BodyPart } from '../entities/BodyPart.js';
@@ -233,6 +234,93 @@ const DRAFT_CARDS = [
     tier: 'elite',
     eligible: () => true,
     apply: (p) => { p.boosts.extraYellowReduction += 0.10; },
+  },
+
+  // --- Offensive weapon-modifying cards ---
+  // These reshape WHAT your weapons do (not just numbers).
+
+  {
+    id: 'splinter-rounds',
+    title: 'Splinter Rounds',
+    desc: 'Your turret, rapid and pulse bullets pierce one additional enemy.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.bulletPierce = (p.boosts.bulletPierce || 0) + 1; },
+  },
+  {
+    id: 'twin-missile',
+    title: 'Twin Missile',
+    desc: 'Missile parts launch 2 missiles per volley instead of 1.',
+    eligible: (p) => p.boosts.missileMultishot < 2,
+    apply: (p) => { p.boosts.missileMultishot = Math.max(2, p.boosts.missileMultishot || 1); },
+  },
+  {
+    id: 'cluster-missiles',
+    title: 'Cluster Missiles',
+    desc: 'Missiles spawn 6 shrapnel bullets in a ring when they explode.',
+    eligible: (p) => !p.boosts.clusterMissiles,
+    apply: (p) => { p.boosts.clusterMissiles = true; },
+  },
+  {
+    id: 'volatile-tail',
+    title: 'Volatile Tail',
+    desc: 'Body parts detonate in a small AoE blast when destroyed. Damage scales with the part value.',
+    eligible: (p) => !p.boosts.volatileTail,
+    apply: (p) => { p.boosts.volatileTail = true; },
+  },
+  {
+    id: 'shockwave-up',
+    title: 'Shockwave+',
+    desc: '+15% damage and +10% radius on your Shockwave (Q).',
+    eligible: () => true,
+    apply: (p) => {
+      p.boosts.shockwaveDamageMult *= 1 + 0.15;
+      p.boosts.shockwaveRadiusMult *= 1 + 0.10;
+    },
+  },
+  {
+    id: 'overcharge-up',
+    title: 'Overcharge+',
+    desc: 'Extends your Overcharge (E) buff window by 1 second.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.overchargeDurationBonusMs += 1000; },
+  },
+
+  // --- Elite versions of the new weapon mods ---
+  {
+    id: 'elite-tri-missile',
+    title: 'Tri-Missile Salvo',
+    desc: 'Missile parts launch 3 missiles per volley (overrides Twin Missile).',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => { p.boosts.missileMultishot = Math.max(3, p.boosts.missileMultishot || 1); },
+  },
+  {
+    id: 'elite-shockwave',
+    title: 'Resonance Pulse',
+    desc: 'Shockwave deals +50% damage, +25% radius, and recharges 30% faster.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => {
+      p.boosts.shockwaveDamageMult *= 1.50;
+      p.boosts.shockwaveRadiusMult *= 1.25;
+      // Borrow the dash cooldown machinery? No - shockwave reads its own
+      // cooldown from config. Instead bake a discount in via extra duration:
+      // actually, simplest: bump the boost so future shockwave casts ready
+      // sooner by intercepting in Player.update isn't viable. We'll bake
+      // a dedicated multiplier into the shockwave boost block.
+      p.boosts.shockwaveCooldownMult = (p.boosts.shockwaveCooldownMult || 1) * 0.70;
+    },
+  },
+  {
+    id: 'elite-overcharge',
+    title: 'Singularity Charge',
+    desc: 'Overcharge lasts 3 extra seconds and recharges 30% faster.',
+    tier: 'elite',
+    eligible: () => true,
+    apply: (p) => {
+      p.boosts.overchargeDurationBonusMs += 3000;
+      p.boosts.overchargeCooldownMult = (p.boosts.overchargeCooldownMult || 1) * 0.70;
+    },
   },
 ];
 
@@ -834,6 +922,77 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Active Q ability and the Volatile-Tail effect both use this. Damages every
+   * enemy in `radius` and applies a brief outward knockback impulse.
+   * Options:
+   *   - color:     ring stroke color (default cyan)
+   *   - knockback: speed of outward velocity burst (default SHOCKWAVE value)
+   */
+  castShockwave(x, y, radius, damage, opts = {}) {
+    const ringColor = opts.color ?? 0xa5d8ff;
+    const knockback = opts.knockback ?? SHOCKWAVE.knockbackSpeed;
+
+    // Visual: expanding ring + brief screen shake.
+    const ring = this.add.circle(x, y, 12, ringColor, 0);
+    ring.setStrokeStyle(4, ringColor, 0.95).setDepth(45);
+    this.tweens.add({
+      targets: ring,
+      scale: radius / 12,
+      alpha: 0,
+      duration: 320,
+      ease: 'Cubic.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+    const flash = this.add.circle(x, y, radius * 0.55, 0xffffff, 0.20).setDepth(44);
+    this.tweens.add({
+      targets: flash, alpha: 0, duration: 220,
+      onComplete: () => flash.destroy(),
+    });
+    this.cameras.main.shake(130, 0.005);
+
+    // Damage + knockback enemies in range.
+    const r2 = radius * radius;
+    this.enemies?.getChildren?.().forEach((e) => {
+      if (!e || !e.active) return;
+      const dx = e.x - x, dy = e.y - y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > r2) return;
+      e.takeDamage?.(damage);
+      this.spawnDamageText(e.x, e.y - e.displayHeight / 2, damage, 'enemy');
+      if (knockback > 0 && e.body) {
+        const d = Math.sqrt(d2) || 1;
+        e.body.setVelocity((dx / d) * knockback, (dy / d) * knockback);
+      }
+    });
+  }
+
+  /**
+   * Active E ability: visual feedback only; the actual stat changes are read
+   * by Player / BodyPart from `player.overchargeUntil`.
+   */
+  castOvercharge(player, durationMs) {
+    const halo = this.add.circle(player.x, player.y, 28, 0xffd64a, 0).setDepth(-1);
+    halo.setStrokeStyle(3, 0xffd64a, 0.9);
+    this.tweens.add({
+      targets: halo,
+      scale: 1.8,
+      alpha: 0,
+      duration: 380,
+      onComplete: () => halo.destroy(),
+    });
+    // Floating "OVERCHARGE!" text.
+    const t = this.add.text(player.x, player.y - 36, 'OVERCHARGE!', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#ffd64a',
+      stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5, 1).setDepth(60);
+    this.tweens.add({
+      targets: t, y: t.y - 22, alpha: 0, duration: 800,
+      onComplete: () => t.destroy(),
+    });
+    this.cameras.main.flash(120, 255, 220, 110, false);
+  }
+
   spawnExplosion(x, y, radius) {
     const c = this.add.circle(x, y, radius * 0.4, 0xffce80, 0.55);
     const ring = this.add.circle(x, y, 2, 0xffffff, 0.0);
@@ -860,9 +1019,22 @@ export class GameScene extends Phaser.Scene {
 
   onBulletHitEnemy(bullet, enemy) {
     if (!bullet.active || !enemy.active) return;
+    // Piercing: skip if we already hit this enemy with this bullet.
+    if (bullet._hits) {
+      if (bullet._hits.has(enemy)) return;
+    } else {
+      bullet._hits = new Set();
+    }
+    bullet._hits.add(enemy);
     enemy.takeDamage?.(bullet.damage);
     this.spawnDamageText(enemy.x, enemy.y - enemy.displayHeight / 2, bullet.damage, 'enemy');
-    bullet.destroy();
+    if ((bullet.pierceLeft || 0) > 0) {
+      bullet.pierceLeft--;
+      // Slight visual feedback so piercing reads.
+      bullet.setAlpha(0.85 - 0.15 * Math.max(0, Math.min(2, 2 - bullet.pierceLeft)));
+    } else {
+      bullet.destroy();
+    }
   }
 
   onBulletHitPlayer(bullet, player) {

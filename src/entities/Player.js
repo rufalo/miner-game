@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION, COMBO } from '../config.js';
+import { PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION, COMBO, SHOCKWAVE, OVERCHARGE } from '../config.js';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
@@ -51,6 +51,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       pulseFireRateMult: 1,
       dashCooldownMult: 1,          // <1 = faster dash recharge
       extraYellowReduction: 0,      // adds on top of yellow part reduction
+      // --- weapon-modifying ---
+      bulletPierce: 0,              // # extra enemies each turret/pulse bullet pierces
+      missileMultishot: 1,          // # missiles fired per missile-part volley
+      clusterMissiles: false,       // missiles spawn shrapnel bullets on impact
+      volatileTail: false,          // body parts explode in AoE when destroyed
+      // --- active ability scaling ---
+      shockwaveDamageMult: 1,
+      shockwaveRadiusMult: 1,
+      shockwaveCooldownMult: 1,
+      overchargeDurationBonusMs: 0,
+      overchargeCooldownMult: 1,
     };
     // Cards consumed while alive; persists across deaths only if we save it
     // (currently per-run only).
@@ -73,6 +84,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.dashReadyAt = 0;
     this.nextBasePulseAt = 0;
 
+    // Active-ability cooldown / state.
+    this.shockwaveReadyAt = 0;
+    this.overchargeReadyAt = 0;
+    this.overchargeUntil = 0;
+
     // Input
     this.cursors = scene.input.keyboard.createCursorKeys();
     this.keys = scene.input.keyboard.addKeys({
@@ -81,6 +97,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       S: Phaser.Input.Keyboard.KeyCodes.S,
       D: Phaser.Input.Keyboard.KeyCodes.D,
       SPACE: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      Q: Phaser.Input.Keyboard.KeyCodes.Q,
+      E: Phaser.Input.Keyboard.KeyCodes.E,
       ONE: Phaser.Input.Keyboard.KeyCodes.ONE,
       TWO: Phaser.Input.Keyboard.KeyCodes.TWO,
       THREE: Phaser.Input.Keyboard.KeyCodes.THREE,
@@ -287,14 +305,43 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     if (dir.lengthSq() > 0) this.rotation = Math.atan2(dir.y, dir.x);
 
+    // Q: Shockwave. Radial AoE around the player with a small i-frame window
+    // so it doubles as a panic button.
+    if (Phaser.Input.Keyboard.JustDown(this.keys.Q) && time >= this.shockwaveReadyAt) {
+      const radius = SHOCKWAVE.radius * (this.boosts?.shockwaveRadiusMult ?? 1);
+      const dmg = SHOCKWAVE.damage * (this.boosts?.shockwaveDamageMult ?? 1);
+      const cd = SHOCKWAVE.cooldownMs * (this.boosts?.shockwaveCooldownMult ?? 1);
+      this.iframeUntil = Math.max(this.iframeUntil, time + SHOCKWAVE.iframeMs);
+      this.shockwaveReadyAt = time + cd;
+      this.scene.castShockwave?.(this.x, this.y, radius, dmg);
+    }
+
+    // E: Overcharge. Buff window: 2x fire rate + 1.2x damage on every weapon.
+    // Effect itself is applied where pulse / body parts read their stats.
+    if (Phaser.Input.Keyboard.JustDown(this.keys.E) && time >= this.overchargeReadyAt) {
+      const dur = OVERCHARGE.durationMs + (this.boosts?.overchargeDurationBonusMs ?? 0);
+      const cd = OVERCHARGE.cooldownMs * (this.boosts?.overchargeCooldownMult ?? 1);
+      this.overchargeUntil = time + dur;
+      this.overchargeReadyAt = time + cd;
+      this.scene.castOvercharge?.(this, dur);
+    }
+    const overcharged = time < this.overchargeUntil;
+
     // Built-in base pulse weapon.
     if (time >= this.nextBasePulseAt) {
       const target = this.scene.targeting?.findNearestEnemy(this.x, this.y, PLAYER.basePulseRange);
       if (target) {
         const angle = Math.atan2(target.y - this.y, target.x - this.x);
-        const dmg  = PLAYER.basePulseDamage * (this.boosts?.pulseDamageMult ?? 1);
-        const rate = PLAYER.basePulseFireRate * (this.boosts?.pulseFireRateMult ?? 1);
-        this.scene.spawnBullet(this.x, this.y, angle, dmg, true);
+        let dmg  = PLAYER.basePulseDamage * (this.boosts?.pulseDamageMult ?? 1);
+        let rate = PLAYER.basePulseFireRate * (this.boosts?.pulseFireRateMult ?? 1);
+        if (overcharged) {
+          dmg *= OVERCHARGE.damageMult;
+          rate *= OVERCHARGE.fireRateMult;
+        }
+        const b = this.scene.spawnBullet(this.x, this.y, angle, dmg, true);
+        if (b && (this.boosts?.bulletPierce ?? 0) > 0) {
+          b.pierceLeft = this.boosts.bulletPierce;
+        }
         this.nextBasePulseAt = time + 1000 / rate;
       }
     }

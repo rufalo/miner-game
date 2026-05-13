@@ -56,6 +56,29 @@ export const PLAYER = {
   maxTailSegments: 4,
 };
 
+// --- Active abilities (Q / E) ---
+// Q: Shockwave - radial AoE pulse + knockback.
+export const SHOCKWAVE = {
+  cooldownMs: 8000,
+  radius: 220,
+  damage: 28,
+  knockbackSpeed: 480,     // burst velocity applied to enemies in radius
+  knockbackDecayMs: 220,
+  iframeMs: 180,           // brief i-frames so you can panic-cast safely
+  scaleDamagePerDraft: 0.15, // each "Shockwave+" card multiplies damage by this+1
+  scaleRadiusPerDraft: 0.10, // each "Shockwave+" card multiplies radius by this+1
+};
+
+// E: Overcharge - timed buff that doubles fire rate and grants +20% damage
+// across ALL weapons (pulse + every body part).
+export const OVERCHARGE = {
+  cooldownMs: 18000,
+  durationMs: 4000,
+  fireRateMult: 2.0,
+  damageMult: 1.20,
+  durationBonusPerDraft: 1000, // each "Overcharge+" card extends duration by 1s
+};
+
 export const GREEN = {
   speedBonusPerValue: 0.035,      // +3.5% speed per green.value
 };

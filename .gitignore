@@ -20,3 +20,6 @@ Thumbs.db
 
 # Build artifacts
 *.tsbuildinfo
+
+# Local commit message scratch files (heredoc isn't reliable in PowerShell)
+.commit-msg.tmp

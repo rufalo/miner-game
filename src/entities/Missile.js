@@ -65,7 +65,9 @@ export class Missile extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Called by GameScene on hit. Applies AoE.
+   * Called by GameScene on hit. Applies AoE. If `cluster` is set (granted by
+   * the "Cluster Missiles" draft card) the explosion also spawns 6 short-lived
+   * shrapnel bullets in a ring for friendly missiles.
    */
   explode() {
     this.scene.spawnExplosion?.(this.x, this.y, this.aoe);
@@ -78,6 +80,18 @@ export class Missile extends Phaser.Physics.Arcade.Sprite {
         const dy = e.y - this.y;
         if (dx * dx + dy * dy <= this.aoe * this.aoe) {
           e.takeDamage?.(this.damage);
+        }
+      }
+      if (this.cluster) {
+        const count = 6;
+        const dmg = this.damage * 0.35;
+        for (let i = 0; i < count; i++) {
+          const a = (i / count) * Math.PI * 2;
+          const b = this.scene.spawnBullet(this.x, this.y, a, dmg, true);
+          if (b) {
+            b.setTint(0xffb86a);
+            b.lifeUntil = this.scene.time.now + 420;
+          }
         }
       }
     } else {

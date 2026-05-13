@@ -14,6 +14,9 @@ import { DasherEnemy } from '../entities/enemies/DasherEnemy.js';
 import { GunnerEnemy } from '../entities/enemies/GunnerEnemy.js';
 import { MissileEnemy } from '../entities/enemies/MissileEnemy.js';
 import { BruteEnemy } from '../entities/enemies/BruteEnemy.js';
+import { SplitterEnemy } from '../entities/enemies/SplitterEnemy.js';
+import { SniperEnemy } from '../entities/enemies/SniperEnemy.js';
+import { BomberEnemy } from '../entities/enemies/BomberEnemy.js';
 import { Tiers } from '../systems/Tiers.js';
 import { Spawner } from '../systems/Spawner.js';
 import { Targeting } from '../systems/Targeting.js';
@@ -349,30 +352,41 @@ export class GameScene extends Phaser.Scene {
   }
 
   spawnEnemyForTier(x, y, tier) {
-    // Each tier slightly shifts the type mix toward more dangerous enemies.
+    // Tiered mix: chaser/gunner/dasher show up everywhere; tier 2 introduces
+    // missiles, splitters, and bombers; tier 3 adds snipers; tier 4+ adds
+    // brutes and shifts toward the dangerous side of the table.
     const roll = Math.random();
     const t = Math.min(4, tier);
     let cls;
     if (t === 1) {
-      if (roll < 0.6) cls = ChaserEnemy;
-      else if (roll < 0.85) cls = GunnerEnemy;
-      else cls = DasherEnemy;
+      if (roll < 0.55) cls = ChaserEnemy;
+      else if (roll < 0.80) cls = GunnerEnemy;
+      else if (roll < 0.95) cls = DasherEnemy;
+      else cls = BomberEnemy;
     } else if (t === 2) {
-      if (roll < 0.4) cls = ChaserEnemy;
-      else if (roll < 0.65) cls = GunnerEnemy;
-      else if (roll < 0.85) cls = DasherEnemy;
-      else cls = MissileEnemy;
+      if (roll < 0.30) cls = ChaserEnemy;
+      else if (roll < 0.50) cls = GunnerEnemy;
+      else if (roll < 0.65) cls = DasherEnemy;
+      else if (roll < 0.78) cls = MissileEnemy;
+      else if (roll < 0.90) cls = BomberEnemy;
+      else cls = SplitterEnemy;
     } else if (t === 3) {
-      if (roll < 0.25) cls = ChaserEnemy;
-      else if (roll < 0.45) cls = GunnerEnemy;
-      else if (roll < 0.7) cls = DasherEnemy;
-      else if (roll < 0.9) cls = MissileEnemy;
+      if (roll < 0.18) cls = ChaserEnemy;
+      else if (roll < 0.34) cls = GunnerEnemy;
+      else if (roll < 0.50) cls = DasherEnemy;
+      else if (roll < 0.66) cls = MissileEnemy;
+      else if (roll < 0.78) cls = BomberEnemy;
+      else if (roll < 0.88) cls = SplitterEnemy;
+      else if (roll < 0.96) cls = SniperEnemy;
       else cls = BruteEnemy;
     } else {
-      if (roll < 0.18) cls = ChaserEnemy;
-      else if (roll < 0.35) cls = GunnerEnemy;
-      else if (roll < 0.55) cls = DasherEnemy;
-      else if (roll < 0.78) cls = MissileEnemy;
+      if (roll < 0.12) cls = ChaserEnemy;
+      else if (roll < 0.26) cls = GunnerEnemy;
+      else if (roll < 0.40) cls = DasherEnemy;
+      else if (roll < 0.56) cls = MissileEnemy;
+      else if (roll < 0.68) cls = BomberEnemy;
+      else if (roll < 0.80) cls = SplitterEnemy;
+      else if (roll < 0.90) cls = SniperEnemy;
       else cls = BruteEnemy;
     }
     const e = new cls(this, x, y, tier);

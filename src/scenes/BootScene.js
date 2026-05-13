@@ -28,9 +28,12 @@ export class BootScene extends Phaser.Scene {
     this.makeEnemyTex('enemy_gunner',  0xb56dff, 'triangle');
     this.makeEnemyTex('enemy_missile', 0x6dfff0, 'pentagon');
     this.makeEnemyTex('enemy_brute',   0xff5555, 'hex');
-    this.makeEnemyTex('enemy_hunter',  0xff2a2a, 'spike');
-    this.makeEnemyTex('enemy_swarmer', 0xffe14a, 'circle');
-    this.makeBossTex('enemy_boss',     0xff3a3a);
+    this.makeEnemyTex('enemy_hunter',   0xff2a2a, 'spike');
+    this.makeEnemyTex('enemy_swarmer',  0xffe14a, 'circle');
+    this.makeEnemyTex('enemy_splitter', 0xff8a44, 'cluster');
+    this.makeEnemyTex('enemy_sniper',   0x9affff, 'cross');
+    this.makeEnemyTex('enemy_bomber',   0xff6a3a, 'mine');
+    this.makeBossTex('enemy_boss',      0xff3a3a);
 
     this.scene.start('GameScene');
     this.scene.launch('UIScene');
@@ -156,6 +159,55 @@ export class BootScene extends Phaser.Scene {
         }
         g.fillPoints(pts, true);
         g.strokePoints(pts, true);
+        break;
+      }
+      case 'cluster': {
+        // Splitter: a big lobed cluster of 4 circles (reads as "about to split").
+        const r = half * 0.42;
+        const offs = [
+          { x: half - r * 0.7, y: half - r * 0.7 },
+          { x: half + r * 0.7, y: half - r * 0.7 },
+          { x: half - r * 0.7, y: half + r * 0.7 },
+          { x: half + r * 0.7, y: half + r * 0.7 },
+        ];
+        for (const o of offs) {
+          g.fillCircle(o.x, o.y, r);
+          g.strokeCircle(o.x, o.y, r);
+        }
+        break;
+      }
+      case 'cross': {
+        // Sniper: a thin "+" reticle silhouette.
+        const arm = half - 6;
+        const thick = 8;
+        g.fillRect(half - thick, 4, thick * 2, size - 8);
+        g.fillRect(4, half - thick, size - 8, thick * 2);
+        g.lineStyle(2, 0x111722, 1);
+        g.strokeRect(half - thick, 4, thick * 2, size - 8);
+        g.strokeRect(4, half - thick, size - 8, thick * 2);
+        // small ring overlay so it reads as a scope.
+        g.lineStyle(2, 0x111722, 1);
+        g.strokeCircle(half, half, arm * 0.45);
+        break;
+      }
+      case 'mine': {
+        // Bomber: spiked sea-mine. Circle with short outward triangles.
+        g.fillCircle(half, half, half - 10);
+        g.strokeCircle(half, half, half - 10);
+        const spikes = 8;
+        for (let i = 0; i < spikes; i++) {
+          const a = (i / spikes) * Math.PI * 2;
+          const cx = half + Math.cos(a) * (half - 10);
+          const cy = half + Math.sin(a) * (half - 10);
+          const tx = half + Math.cos(a) * (half - 2);
+          const ty = half + Math.sin(a) * (half - 2);
+          const nx = -Math.sin(a) * 4;
+          const ny =  Math.cos(a) * 4;
+          g.fillTriangle(cx + nx, cy + ny, cx - nx, cy - ny, tx, ty);
+        }
+        // Central white dot (fuse).
+        g.fillStyle(0xffffff, 0.95);
+        g.fillCircle(half, half, 4);
         break;
       }
     }

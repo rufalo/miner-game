@@ -277,6 +277,33 @@ export const ENEMY = {
   swarmerHP: 6,
   swarmerDamage: 5,
   swarmerContactCooldownMs: 450,
+
+  // --- Splitter (large, slow; spawns minions on death) ---
+  splitterSpeed: 80,
+  splitterHP: 70,
+  splitterDamage: 12,
+  splitterContactCooldownMs: 800,
+  splitterMinionCount: 3,
+  splitterMinionHP: 10,
+  splitterMinionSpeed: 200,
+  splitterMinionDamage: 5,
+
+  // --- Sniper (very long range, telegraphed beam, fragile) ---
+  sniperSpeed: 70,
+  sniperHP: 16,
+  sniperRange: 900,
+  sniperKeepDistance: 720,
+  sniperFireRate: 0.45,             // attempts per second (beam volleys)
+  sniperTelegraphMs: 1200,
+  sniperBeamSpeed: 1500,            // fast "bullet" used for the beam
+  sniperBeamDamage: 22,
+
+  // --- Bomber (kamikaze, low HP, explodes on contact OR death) ---
+  bomberSpeed: 130,
+  bomberHP: 14,
+  bomberExplodeRadius: 90,
+  bomberExplodeDamage: 22,
+  bomberFuseRadius: 50,             // auto-detonate within this distance
 };
 
 /**

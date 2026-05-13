@@ -52,9 +52,13 @@ Persistent **hunter** and **swarmer wave** systems were added (see §14).
 Remaining ideas:
 
 - **More enemy types** to fill out the bestiary:
-  - **Splitter**: large enemy that breaks into 2–3 fast minions on death. **M**
-  - **Sniper**: very long range, telegraphed laser beam. **M**
-  - **Bomber / kamikaze**: slow, explodes on contact. **S**
+  - ~~**Splitter**: large enemy that breaks into 2–3 fast minions on death.~~ ✅ implemented — orange 4-circle cluster, on-death spawns `splitterMinionCount` mini-chasers (+0.5 per tier) that aggro instantly. Tier 2+.
+  - ~~**Sniper**: very long range, telegraphed laser beam.~~ ✅ implemented — cyan reticle, kites away to `sniperKeepDistance`, draws a thin red follow-line for `sniperTelegraphMs`, then locks angle and fires a very fast bright beam. Tier 3+.
+  - ~~**Bomber / kamikaze**: slow, explodes on contact.~~ ✅ implemented — orange spiked mine, charges player and detonates within `bomberFuseRadius`. AoE damages player + body parts (60%) + nearby enemies (50%). Also detonates on death. Tier 1+.
+  - **Shielder / dome enemy**: projects a small shield bubble that blocks bullets/missiles from one direction, must be flanked. **M**
+  - **Healer**: orbits other enemies, slowly heals them; killing it first becomes a tactical priority. **M**
+  - **Teleporter / ambusher**: blinks every few seconds toward the player's blind side. **M**
+  - **Tank artillery**: very slow, very long range, lobs arcing AoE projectiles you can sidestep. **M**
 - **Mini-boss per tier** distinct from regular enemy spawns (larger silhouette, unique attack). **L**
 - **Enemy aggro chaining** — pulling one enemy alerts nearby zone members instead of triggering them individually. **S**
 - **Smarter pathfinding** — current straight-line pursuit gets stuck on… nothing right now, but if you add obstacles this becomes necessary. **M**

@@ -442,16 +442,31 @@ export class UIScene extends Phaser.Scene {
       g.fillCircle(zx, zy, 2 + Math.min(3, aliveCount));
     }
 
-    // Persistent hunters / swarmers (mobile threats) - drawn brighter so they
-    // stand out from static enemy zones.
+    // Persistent hunters / swarmers (mobile threats) and special enemy types
+    // (sniper / bomber / splitter) - drawn brighter so they stand out from
+    // generic enemy-zone occupants.
     const enemies = this.gs.enemies?.getChildren?.() ?? [];
     for (const e of enemies) {
       if (!e.active) continue;
-      const isHunter = e.texture?.key === 'enemy_hunter';
-      const isSwarmer = e.texture?.key === 'enemy_swarmer';
-      if (!isHunter && !isSwarmer) continue;
-      g.fillStyle(isHunter ? 0xff2a2a : 0xffe14a, 0.95);
-      g.fillCircle(e.x * k, e.y * k, isHunter ? 2.5 : 1.5);
+      const key = e.texture?.key;
+      if (key === 'enemy_hunter') {
+        g.fillStyle(0xff2a2a, 0.95);
+        g.fillCircle(e.x * k, e.y * k, 2.5);
+      } else if (key === 'enemy_swarmer') {
+        g.fillStyle(0xffe14a, 0.95);
+        g.fillCircle(e.x * k, e.y * k, 1.5);
+      } else if (key === 'enemy_sniper') {
+        // Cyan cross: stands out at a glance.
+        g.fillStyle(0x9affff, 0.95);
+        g.fillRect(e.x * k - 2.5, e.y * k - 0.5, 5, 1);
+        g.fillRect(e.x * k - 0.5, e.y * k - 2.5, 1, 5);
+      } else if (key === 'enemy_bomber') {
+        g.fillStyle(0xff6a3a, 0.95);
+        g.fillCircle(e.x * k, e.y * k, 2);
+      } else if (key === 'enemy_splitter') {
+        g.fillStyle(0xff8a44, 0.95);
+        g.fillCircle(e.x * k, e.y * k, 2.5);
+      }
     }
 
     // Bosses (large red diamonds, very visible).

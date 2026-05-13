@@ -110,4 +110,30 @@ Two kinds of pressure:
 - **Enemy zones** in the outer tier rings — sit still until you wander near, then attack. Guard the richer deposits.
 - **Hunters and swarms** — the longer a run lasts, the more red *hunter* enemies relentlessly seek you out from off-screen, and occasional swarmer waves charge you in packs. Pressure scales with run time and max tier reached. Watch the bottom-left readout: `hunters N/target   wave in Xs`.
 
+### Enemy bestiary
+
+Common across tiers:
+
+- **Chaser** — runs straight at you, melee touch damage.
+- **Dasher** — periodically dashes a short distance to close the gap.
+- **Gunner** — kites at medium range and fires bullets.
+
+Introduced at tier 2+:
+
+- **Missile** — long-range homing missile launcher.
+- **Bomber** *(new)* — orange spiked "sea mine" silhouette. Charges you and **detonates on contact (or on death)** for AoE damage to you *and* your tail. The blast also half-damages other enemies caught in it — bait clusters when you can.
+- **Splitter** *(new)* — chunky 4-circle cluster. Slow melee bruiser. **On death it bursts into 3 fast mini-chasers** that immediately aggro you.
+
+Introduced at tier 3+:
+
+- **Sniper** *(new)* — cyan reticle. Keeps you at long range, draws a thin red **telegraph line** for ~1.2 s, then fires a fast bright **beam** in the locked direction. Stand still and it will hit; **dash sideways** at the lock moment to dodge.
+- **Brute** — heavy, high-HP melee.
+
+Hunters and swarmers (mobile pressure, independent of zones):
+
+- **Hunter** — bright red star, persistent off-screen seeker.
+- **Swarmer** — small yellow circle, spawns in waves and rushes you.
+
+On the minimap each special type has its own color/shape so you can read the threat at a glance (cyan cross = sniper, orange dot = bomber/splitter, etc.). Bosses still show as bright red diamonds.
+
 The further you travel from origin, the richer the deposits and the nastier the enemy mix.

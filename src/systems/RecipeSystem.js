@@ -59,16 +59,22 @@ export class RecipeSystem {
     const essences = RecipeSystem.computeEssences(ingredients);
     const colors = RecipeSystem.countColors(ingredients);
 
-    // 1. Monochrome ultimate (3+ of one color).
+    // 1. Monochrome ultimate (threshold per color; red/blue default lower).
     for (const c of ['red', 'blue', 'green', 'yellow']) {
-      if (colors[c] >= RECIPE.monoThreshold) {
+      const thresh =
+        RECIPE.monoThresholdByColor?.[c] ?? RECIPE.monoThreshold ?? 3;
+      if (colors[c] >= thresh) {
         const r = RECIPE.monoRecipes[c];
-        if (r) return { upgrade: r.upgrade, label: r.label, essences, colors, ruleType: 'mono' };
+        if (r) {
+          const tag = r.tag || r.upgrade.toUpperCase();
+          const label = `${colors[c]}× ${c.toUpperCase()}: ${tag}`;
+          return { upgrade: r.upgrade, label, essences, colors, ruleType: 'mono' };
+        }
       }
     }
 
-    // 2. Rainbow (all 4 primary colors present). Checked before pairs so a
-    //    fully-mixed 4-stack always grants the rainbow upgrade.
+    // 2. Rainbow (all 4 primary colors present). Before pairs so a full
+    //    spectrum always grants prism.
     if (colors.red >= 1 && colors.blue >= 1 && colors.green >= 1 && colors.yellow >= 1) {
       const r = RECIPE.rainbow;
       return { upgrade: r.upgrade, label: r.label, essences, colors, ruleType: 'rainbow' };
@@ -82,12 +88,17 @@ export class RecipeSystem {
       }
     }
 
-    // 4. Fallback: highest summed essence.
+    // 4. Fallback: highest summed essence, with optional bias so weapon-linked
+    //    essences win close ties against speed / armor / harvest.
+    const weaponKeys = new Set(RECIPE.weaponEssenceKeys || []);
+    const bias = RECIPE.weaponEssenceBias ?? 1;
     let bestKey = null;
-    let bestVal = -1;
+    let bestScore = -1;
     for (const [k, v] of Object.entries(essences)) {
-      if (v > bestVal) {
-        bestVal = v;
+      const mult = weaponKeys.has(k) ? bias : 1;
+      const score = v * mult;
+      if (score > bestScore) {
+        bestScore = score;
         bestKey = k;
       }
     }

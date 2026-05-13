@@ -133,10 +133,12 @@ export const RED = {
  * way more powerful than a value-2 blue.
  *
  * Combine resolution (in order):
- *   1. Monochrome ultimate  - 3+ ingredients of the same color    -> ultimate
- *   2. Special pair recipe  - two specific colors both present    -> special
- *   3. Rainbow              - all 4 primary colors present        -> prism
- *   4. Fallback             - highest summed essence              -> default
+ *   1. Monochrome ultimate  - per-color threshold (red/blue default 2 for
+ *      easier shooting; green/yellow default 3) -> ultimate
+ *   2. Rainbow              - all 4 primary colors present        -> prism
+ *   3. Special pair recipe  - two specific colors both present    -> special
+ *   4. Fallback             - highest essence, with a bias toward
+ *      weapon-linked essences so mixed batches still often roll guns
  *
  * Granting the same upgrade twice TIERS IT UP (T1 -> T2 -> T3 ...).
  */
@@ -152,32 +154,44 @@ export const RECIPE = {
   // Primary essence is the largest; secondary/tertiary lead to natural cross
   // combos when colors are mixed.
   essences: {
-    red:    { POWER: 3, HEAT: 2,    BLAST: 1 },
-    blue:   { AIM: 3,   CHARGE: 2,  POWER: 1 },
+    // Slightly higher weapon-primary weights so random mixes still lean guns.
+    red:    { POWER: 4, HEAT: 3,    BLAST: 2 },
+    blue:   { AIM: 4,   CHARGE: 2,  POWER: 1 },
     green:  { SWIFT: 3, VITAL: 2,   AIM: 1 },
     yellow: { FORTIFY: 3, HARVEST: 2, VITAL: 1 },
   },
 
   // Special pair recipes. Triggers when BOTH listed colors have at least
   // `minEach` ingredients present in the combine. Order matters - first match
-  // wins. Add new combos to the top.
+  // wins. Put the most common shooting pairs first so they beat niche pairs.
   pairRecipes: [
-    { colors: ['blue', 'yellow'],  minEach: 1, upgrade: 'shield',       label: 'BLUE+YELLOW: SHIELD' },
     { colors: ['blue', 'red'],     minEach: 1, upgrade: 'missile',      label: 'BLUE+RED: MISSILES' },
+    { colors: ['blue', 'green'],   minEach: 1, upgrade: 'sniper',       label: 'BLUE+GREEN: SNIPER' },
+    { colors: ['red',  'yellow'],  minEach: 1, upgrade: 'heavyTurret',  label: 'RED+YELLOW: HEAVY TURRET' },
+    { colors: ['blue', 'yellow'],  minEach: 1, upgrade: 'shield',       label: 'BLUE+YELLOW: SHIELD' },
     { colors: ['red',  'green'],   minEach: 1, upgrade: 'dashStrike',   label: 'RED+GREEN: DASH STRIKE' },
     { colors: ['green', 'yellow'], minEach: 1, upgrade: 'regenBarrier', label: 'GREEN+YELLOW: REGEN BARRIER' },
-    { colors: ['red',  'yellow'],  minEach: 1, upgrade: 'heavyTurret',  label: 'RED+YELLOW: HEAVY TURRET' },
-    { colors: ['blue', 'green'],   minEach: 1, upgrade: 'sniper',       label: 'BLUE+GREEN: SNIPER' },
   ],
 
-  // 3+ of one color = that color's ultimate. Overrides pair recipes.
+  // Monochrome: same-color count threshold. Red/blue default to 2 so LASER /
+  // INFERNO show up much sooner; green/yellow stay at 3 so defensive
+  // ultimates stay a bit rarer than guns.
   monoRecipes: {
-    blue:   { upgrade: 'laser',    label: '3x BLUE: LASER' },
-    red:    { upgrade: 'inferno',  label: '3x RED: INFERNO' },
-    green:  { upgrade: 'blink',    label: '3x GREEN: BLINK' },
-    yellow: { upgrade: 'barrier',  label: '3x YELLOW: BARRIER' },
+    blue:   { upgrade: 'laser',    tag: 'LASER' },
+    red:    { upgrade: 'inferno',  tag: 'INFERNO' },
+    green:  { upgrade: 'blink',    tag: 'BLINK' },
+    yellow: { upgrade: 'barrier',  tag: 'BARRIER' },
   },
+  /** @deprecated use monoThresholdByColor */
   monoThreshold: 3,
+  monoThresholdByColor: {
+    red: 2, blue: 2, green: 3, yellow: 3,
+  },
+
+  // Essences used for shooting (fallback tie-break bias toward guns).
+  weaponEssenceKeys: ['POWER', 'AIM', 'HEAT', 'BLAST', 'CHARGE'],
+  /** Multiplier on weapon essence totals when picking fallback winner (>1 = guns win ties). */
+  weaponEssenceBias: 1.45,
 
   // All 4 primary colors present in the combine.
   rainbow: { upgrade: 'prism', label: 'RAINBOW: PRISM' },

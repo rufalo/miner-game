@@ -73,27 +73,27 @@ Every ingredient contributes 3 essence values, with its **primary essence the hi
 
 | Color | Primary | Secondary | Tertiary |
 |---|---|---|---|
-| **Red** | POWER (3) | HEAT (2) | BLAST (1) |
-| **Blue** | AIM (3) | CHARGE (2) | POWER (1) |
+| **Red** | POWER (4) | HEAT (3) | BLAST (2) |
+| **Blue** | AIM (4) | CHARGE (2) | POWER (1) |
 | **Green** | SWIFT (3) | VITAL (2) | AIM (1) |
 | **Yellow** | FORTIFY (3) | HARVEST (2) | VITAL (1) |
 
 When the cauldron fires it checks rules **in priority order**:
 
-1. **Monochrome ultimate** — 3+ of the same color → that color's "ultimate":
-   - 3× Blue = **LASER** (piercing high-rate beam)
-   - 3× Red = **INFERNO** (fast burning bullets)
-   - 3× Green = **BLINK** (much shorter dash CD + longer i-frames)
-   - 3× Yellow = **BARRIER** (huge regenerating shield)
+1. **Monochrome ultimate** — enough of one color → that color's ultimate. **Red and blue only need 2 matching ingredients** for their gun ultimates; green and yellow still need **3** for Blink / Barrier.
+   - **2× Blue** = **LASER** (piercing high-rate beam)
+   - **2× Red** = **INFERNO** (fast burning bullets)
+   - **3× Green** = **BLINK** (much shorter dash CD + longer i-frames)
+   - **3× Yellow** = **BARRIER** (huge regenerating shield)
 2. **Rainbow** — at least one of every primary color → **PRISM** (multi-color fast bullets).
-3. **Special pair recipe** — both colors present:
-   - Blue + Yellow = **SHIELD**
+3. **Special pair recipe** — both colors present. **Shooting pairs are checked first** so they win ties against defensive pairs when multiple match:
    - Blue + Red = **MISSILES**
+   - Blue + Green = **SNIPER**
+   - Red + Yellow = **HEAVY TURRET**
+   - Blue + Yellow = **SHIELD**
    - Red + Green = **DASH STRIKE** (shockwave on every dash)
    - Green + Yellow = **REGEN BARRIER** (smaller shield + HP regen)
-   - Red + Yellow = **HEAVY TURRET** (big slow piercing bullets)
-   - Blue + Green = **SNIPER** (long-range high-damage single shot)
-4. **Fallback** — highest summed essence picks the upgrade: POWER → Turret, AIM → Sniper, HEAT → Burn aura, SWIFT → Speed, VITAL → Regen, FORTIFY → Armor, HARVEST → Harvest, BLAST → Grenade, CHARGE → Overcharge.
+4. **Fallback** — highest summed essence picks the upgrade, with a **bias toward weapon essences** (POWER, AIM, HEAT, BLAST, CHARGE) so mixed batches still often roll **Turret / Sniper / Grenade** instead of pure Speed / Armor. Mapping: POWER → Turret, AIM → Sniper, HEAT → Burn aura, SWIFT → Speed, VITAL → Regen, FORTIFY → Armor, HARVEST → Harvest, BLAST → Grenade, CHARGE → Overcharge.
 
 The HUD shows a live **`next: <upgrade>`** preview while the tail is filling, so you can steer your mining toward the recipe you want.
 

@@ -193,10 +193,10 @@ Body parts are no longer permanent weapon platforms - they are **ingredients** i
 - **Tail = ingredient slot list** (max == `RECIPE.slots`, default 4). Visually unchanged - still the same snake trail with color-tinted segments.
 - **Each color has 3 essence contributions** (see README table). Primary essence is the highest; secondary/tertiary lead to natural cross-color combos. Essences are scaled by ingredient `value`.
 - **Combine resolves in priority** (in [`RecipeSystem.resolve`](src/systems/RecipeSystem.js)):
-  1. mono (3+ same color) -> color's ultimate (laser / inferno / blink / barrier)
+  1. mono (per-color threshold: red/blue 2 → laser/inferno; green/yellow 3 → blink/barrier) -> color's ultimate
   2. rainbow (all 4 primaries) -> prism
   3. pair recipes (configured list) -> special (shield / missiles / dash strike / regen barrier / heavy turret / sniper)
-  4. fallback: highest summed essence -> mapped upgrade (turret / sniper / burn / speed / regen / armor / harvest / grenade / overcharge)
+  4. fallback: highest summed essence -> mapped upgrade (turret / sniper / burn / speed / regen / armor / harvest / grenade / overcharge), with **weaponEssenceBias** so POWER/AIM/HEAT/BLAST/CHARGE win close ties over non-weapon essences
 - **Same upgrade twice tiers it up** (I -> II -> III -> IV). Each tier's stats live in flat arrays in [`UPGRADES`](src/config.js) so adding a new tier is one array entry.
 
 ### What got retired

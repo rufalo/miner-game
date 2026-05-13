@@ -134,11 +134,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       yellowCount * EVOLUTION.yellowThresholdReduction
     );
 
-    // Threshold per color depends on how many evolutions have already happened
-    // for that color (each one makes the next cost more), reduced by yellow.
+    // Threshold per color = baseThreshold
+    //   + per-color ramp (rewards switching colors)
+    //   + global ramp from total evolutions across all colors (every upgrade
+    //     makes future evolutions cost more, regardless of which color),
+    //   minus the yellow reduction.
+    let totalEvos = 0;
+    for (const c of COLOR_KEYS) totalEvos += this.evolutions[c] || 0;
     for (const color of COLOR_KEYS) {
       const evos = this.evolutions[color] || 0;
-      const base = EVOLUTION.baseThreshold + EVOLUTION.thresholdPerEvolution * evos;
+      const base =
+        EVOLUTION.baseThreshold +
+        EVOLUTION.thresholdPerEvolution * evos +
+        EVOLUTION.thresholdPerGlobalEvolution * totalEvos;
       this.cargo[color].cap = base * (1 - reduction);
     }
   }

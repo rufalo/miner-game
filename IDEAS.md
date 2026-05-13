@@ -162,7 +162,7 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
 - Mining fills a color's gauge. When it pops, it triggers growth in that color and resets.
 - **Append vs upgrade**: under 3 same-color parts → append a new segment; at 3+, the lowest-value matching part is upgraded (`+value`, refreshes size/HP/weapon stats, plays a grow tween).
 - **Soft steering** (`1`-`4`): toggles a "preferred" color. Mining the preferred color fills its gauge ~1.5x faster, and a dot lights up in the HUD.
-- **Threshold ramp**: each evolution makes the next one cost more for that color. Yellow parts globally reduce thresholds by 4% each (capped at 45%).
+- **Threshold ramp**: each evolution makes the next one cost more for that color (`thresholdPerEvolution`). On top of that, **every** evolution (append OR upgrade, any color) bumps the threshold of all four gauges by `thresholdPerGlobalEvolution`, so repeatedly upgrading also makes future evolutions harder. Yellow parts globally reduce thresholds by 4% each (capped at 45%).
 - **Hybrid evolutions**: if a partner gauge is at 80% or more when one fills, both are drained and a hybrid part spawns:
   - **plasma** (blue + red): slow, very-high-damage single shot, long range
   - **swarm** (green + red): rapid small homing missiles with light AoE

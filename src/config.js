@@ -118,6 +118,13 @@ export const BODY_PART = {
 export const EVOLUTION = {
   baseThreshold: 12,              // first evolution of a color needs this much
   thresholdPerEvolution: 7,       // each evolution of that color makes the next cost more
+  /**
+   * Global ramp: each evolution event (append OR upgrade, any color) also
+   * bumps the threshold of every gauge by this much. Compounds with the
+   * per-color ramp above so even repeatedly upgrading the same color makes
+   * the whole snake harder to grow further.
+   */
+  thresholdPerGlobalEvolution: 3,
   upgradeAtPartCount: 3,          // past this many same-color parts, upgrades instead
   upgradeValueIncrement: 2,       // how much value an upgrade adds to the chosen part
   baseValue: 4,                   // starting `value` of a new evolution part

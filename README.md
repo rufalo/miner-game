@@ -58,7 +58,7 @@ Cargo bars are **evolution gauges**. Walk next to a mineral deposit to auto-mine
   - **SWARM** (green + red) — rapid small homing missiles.
   - **RAPID** (blue + green) — high-rate weak bullets.
 
-Each evolution makes the next one for that color cost a bit more. The colored squares scattered around are **boosters** that instantly fill ~60% of the matching gauge for free.
+Each evolution makes the next one for that color cost more, **and every evolution (append or upgrade, any color) globally bumps the threshold of every other gauge**, so the snake is meant to get harder to grow the bigger it gets. The colored squares scattered around are **boosters** that instantly fill ~60% of the matching gauge for free.
 
 ## Combos & alternative follow patterns
 

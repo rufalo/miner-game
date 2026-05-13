@@ -39,6 +39,44 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) this.onDeath();
   }
 
+  /**
+   * Burn DoT applied by Mark-3 missile / swarm. Spec: { dps, durMs }. Burns
+   * stack by refreshing duration and keeping the higher dps. Damage is ticked
+   * by tickBurn() called from the per-enemy update path (via Enemy.update if
+   * subclasses opt in, or via the GameScene update loop).
+   */
+  applyBurn(spec) {
+    if (!spec || !this.active) return;
+    const now = this.scene.time.now;
+    this.burnDps = Math.max(this.burnDps || 0, spec.dps);
+    this.burnUntil = Math.max(this.burnUntil || 0, now + spec.durMs);
+    if (!this._burnTickAt) this._burnTickAt = now + 250;
+  }
+
+  /**
+   * Phaser hook that runs every frame on every active sprite, regardless of
+   * what the subclass's update() does. We use it to tick burns + advertise
+   * an active burn visually without forcing subclasses to call into us.
+   */
+  preUpdate(time, delta) {
+    super.preUpdate(time, delta);
+    if (this.burnUntil) {
+      if (time >= this.burnUntil) {
+        this.burnUntil = 0;
+        this.burnDps = 0;
+        this._burnTickAt = 0;
+      } else if (time >= (this._burnTickAt || 0)) {
+        const dmg = (this.burnDps || 0) * 0.25; // 4 Hz
+        this._burnTickAt = time + 250;
+        if (dmg > 0) {
+          this.hp -= dmg;
+          this.scene?.spawnDamageText?.(this.x, this.y - this.displayHeight / 2, dmg, 'enemy');
+          if (this.hp <= 0) { this.onDeath(); return; }
+        }
+      }
+    }
+  }
+
   onDeath() {
     this.scene.onEnemyKilled?.(this);
     this.destroy();

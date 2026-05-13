@@ -138,6 +138,45 @@ export const BODY_PART = {
  *  - If another color's gauge is at >= `hybridGaugeMin` when one fills, both
  *    are consumed and a HYBRID part is spawned (recipes in HYBRIDS below).
  */
+/**
+ * Mark tier system. A part's `mark` (1..4) is derived from its accumulated
+ * `value`. Each promotion unlocks a qualitative ability instead of just bigger
+ * numbers. The set of abilities per `kind` is defined in MARK_ABILITIES.
+ */
+export const MARK = {
+  thresholds: [0, 8, 18, 32],     // value >= thresholds[i] -> mark = i+1
+  promoteShakeMs: 120,
+};
+
+/**
+ * Per-kind unlocks at each mark. Used by BodyPart.applyMarkAbilities() to set
+ * flags read by the weapon dispatcher and update loop. Anything not declared
+ * here is treated as "no extra effect" at that mark.
+ */
+export const MARK_ABILITIES = {
+  turret:  { 2: { multishot: 1 }, 3: { pierce: 1 }, 4: { critChance: 0.25 } },
+  missile: { 2: { multishot: 1 }, 3: { burn: { dps: 4, durMs: 1500 } }, 4: { fireRateMult: 1.20 } },
+  speed:   { 2: { regenHpPerSec: 0.40 }, 3: { auraDps: 4, auraRadius: 80 }, 4: { dashEchoMs: 1000 } },
+  cargo:   { 2: { gaugeFillBonus: 0.05 }, 3: { lifestealPer5: 1 }, 4: { doublePickupChance: 0.08 } },
+  plasma:  { 2: { pierce: 1 }, 3: { onHitAoeRadius: 60, onHitAoeDamageMult: 0.35 }, 4: { damageMult: 1.25 } },
+  swarm:   { 2: { multishot: 1 }, 3: { burn: { dps: 3, durMs: 1200 } }, 4: { damageMult: 1.25 } },
+  rapid:   { 2: { pierce: 1 }, 3: { fireRateMult: 1.25 }, 4: { critChance: 0.25 } },
+  prism:   { 2: { damageMult: 1.20 }, 3: { fireRateMult: 1.20 }, 4: { pierce: 1 } },
+};
+
+/**
+ * Set bonuses computed in Player.chainChanged() based on attached part colors.
+ * Threshold = how many of that color it takes to activate.
+ */
+export const SET_BONUSES = {
+  red:    { count: 3, key: 'pyrotechnician', missileAoeMult: 1.15 },
+  blue:   { count: 3, key: 'marksman',        turretRangeMult: 1.15 },
+  green:  { count: 3, key: 'greased',         passiveRegenHpPerSec: 0.5 },
+  yellow: { count: 3, key: 'logistics',       preferredMineBonus: 0.10 },
+  // Polychrome: at least 1 of each primary color attached.
+  polychrome: { key: 'polychrome', damageMult: 1.05, speedMult: 1.05 },
+};
+
 export const EVOLUTION = {
   baseThreshold: 16,              // first evolution of a color needs this much
   thresholdPerEvolution: 10,      // each evolution of that color makes the next cost more

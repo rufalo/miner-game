@@ -80,6 +80,8 @@ export class Missile extends Phaser.Physics.Arcade.Sprite {
         const dy = e.y - this.y;
         if (dx * dx + dy * dy <= this.aoe * this.aoe) {
           e.takeDamage?.(this.damage);
+          // Mark-3 burn rider on missiles / swarm; propagates to all hit.
+          if (this.burn) e.applyBurn?.(this.burn);
         }
       }
       if (this.cluster) {

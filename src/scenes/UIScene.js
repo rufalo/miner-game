@@ -402,9 +402,15 @@ export class UIScene extends Phaser.Scene {
     // Body part summary including hybrid kinds + combo state.
     const counts = { red: 0, green: 0, blue: 0, yellow: 0, plasma: 0, swarm: 0, rapid: 0, prism: 0 };
     let orbitalCount = 0;
+    let highestMark = 1;
+    let topMarkPart = null;
     for (const part of p.parts) {
       counts[part.color] = (counts[part.color] || 0) + 1;
       if (part.followMode === 'orbit') orbitalCount++;
+      if ((part.mark || 1) > highestMark) {
+        highestMark = part.mark;
+        topMarkPart = part;
+      }
     }
     const hybridLine = (counts.plasma + counts.swarm + counts.rapid) > 0
       ? `   hyb  P:${counts.plasma} S:${counts.swarm} Ra:${counts.rapid}`
@@ -413,6 +419,16 @@ export class UIScene extends Phaser.Scene {
     if (orbitalCount > 0) comboBits.push(`orb:${orbitalCount}`);
     if (counts.prism > 0) comboBits.push('PRISM');
     if (p.branchMode) comboBits.push('SPLIT');
+    if (highestMark >= 2) {
+      const roman = ['', 'I', 'II', 'III', 'IV'][highestMark] || '?';
+      comboBits.push(`M${roman}`);
+    }
+    // Active set bonuses live behind a short prefix; show their keys so the
+    // player can read "polychrome" / "marksman" etc at a glance.
+    const setKeys = p.setBonuses?.active ?? [];
+    if (setKeys.length) {
+      for (const k of setKeys) comboBits.push(k.toUpperCase());
+    }
     const comboLine = comboBits.length ? `   [${comboBits.join(' ')}]` : '';
     const trailLen = p.trailParts().length;
     const tailCap = PLAYER.maxTailSegments;

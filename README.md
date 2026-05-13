@@ -71,6 +71,39 @@ Cargo bars are **evolution gauges**. Walk next to a mineral deposit to auto-mine
 
 Each evolution makes the next one for that color cost more, **and every evolution (append or upgrade, any color) globally bumps the threshold of every other gauge**, so the snake is meant to get harder to grow the bigger it gets. The colored squares scattered around are **boosters** that instantly fill ~60% of the matching gauge for free.
 
+## Mark tiers (qualitative upgrades)
+
+Every body part has a **Mark tier** (I → IV) derived from its accumulated `value`. Crossing a threshold unlocks a **new ability** instead of just bigger numbers, and the part grows a soft glow ring colored by its tier (white → gold → orange).
+
+Thresholds: `value ≥ 8` = II, `≥ 18` = III, `≥ 32` = IV.
+
+| Kind | Mark II | Mark III | Mark IV |
+|---|---|---|---|
+| **turret** (blue) | +1 multishot | bullets pierce one extra enemy | 25 % crit chance (2× damage) |
+| **missile** (red) | +1 missile per volley | hits apply burn DoT (4 dps / 1.5 s) | +20 % fire rate |
+| **speed** (green) | +0.4 HP/s regen | damage aura (4 dps in 80 px) | dash leaves a Shockwave echo |
+| **cargo** (yellow) | +5 % gauge fill (stacks per part) | +1 HP per 5 raw units mined | 8 % chance to double mining ticks |
+| **plasma** (b+r) | +1 pierce | on-hit AoE splash (60 px) | +25 % damage |
+| **swarm** (g+r) | +1 missile per volley | hits apply burn | +25 % damage |
+| **rapid** (b+g) | +1 pierce | +25 % fire rate | +25 % crit chance |
+| **prism** (rainbow) | +20 % damage | +20 % fire rate | +1 pierce on every beam |
+
+A small **MARK II / III / IV** banner pops over the part the moment it promotes.
+
+## Set bonuses
+
+The chain checks attached part **colors** every time it changes and activates set bonuses automatically. Active sets are shown on the HUD parts line in brackets (`MARKSMAN`, `POLYCHROME`, ...).
+
+| Set | Activates when... | Effect |
+|---|---|---|
+| **Pyrotechnician** | ≥ 3 red parts | +15 % missile AoE radius |
+| **Marksman** | ≥ 3 blue parts | +15 % turret range |
+| **Greased** | ≥ 3 green parts | +0.5 HP/s passive regen |
+| **Logistics** | ≥ 3 yellow parts | +10 % to preferred-color mining multiplier |
+| **Polychrome** | ≥ 1 of each primary color | +5 % damage AND +5 % speed (every weapon) |
+
+Set bonuses stack with mark abilities — e.g. a Polychrome chain with 3 mark II missiles gets the missile mark II multishot, the missile set's AoE, the polychrome damage bonus, plus any draft cards.
+
 ## Combos & alternative follow patterns
 
 The snake isn't just a single straight tail. Parts can auto-combine and adopt different follow patterns:

@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
-import { PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION, COMBO, SHOCKWAVE, OVERCHARGE } from '../config.js';
+import {
+  PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION, COMBO, SHOCKWAVE, OVERCHARGE,
+  SET_BONUSES,
+} from '../config.js';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
@@ -38,6 +41,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Combo state.
     this.branchMode = false;           // split-tail unlocked
     this.rainbowSpawned = false;       // PRISM orbital spawned
+
+    // Mark-tier aggregated passive effects (sum of every part's markEffects).
+    // Refreshed inside chainChanged() so adds / upgrades both update it.
+    this.markAggregate = {
+      regenHpPerSec: 0,
+      auraDps: 0,
+      auraRadius: 0,
+      dashEchoMs: 0,
+      gaugeFillBonus: 0,
+      lifestealPer5: 0,
+      doublePickupChance: 0,
+    };
+    // Active set bonuses, also refreshed in chainChanged().
+    this.setBonuses = {};
+    // Regen accumulator + soft heartbeat for aura damage.
+    this._regenCarry = 0;
+    this._lifestealCarry = 0;
+    this._nextAuraAt = 0;
+    // Track total minerals mined across the run so the cargo Mark 3 lifesteal
+    // can fire every N units.
+    this._mineralAccum = 0;
 
     // --- Draft-granted persistent buffs ---
     // Bonus added to PLAYER.maxTailSegments by "+1 Max Tail" cards.
@@ -160,7 +184,79 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
       idx++;
     }
+
+    this.recomputeMarkAggregate();
+    this.recomputeSetBonuses();
+    // Re-apply weapon stats so set-bonus multipliers and mark fireRate/damage
+    // changes take effect immediately.
+    this.refreshAllPartStats();
     this.recomputeStats();
+  }
+
+  /**
+   * Sums up every part's Mark-granted passive effects so the Player.update
+   * loop can apply them in one place (HP regen, aura, gauge fill bonus, etc).
+   */
+  recomputeMarkAggregate() {
+    const agg = {
+      regenHpPerSec: 0,
+      auraDps: 0,
+      auraRadius: 0,
+      dashEchoMs: 0,
+      gaugeFillBonus: 0,
+      lifestealPer5: 0,
+      doublePickupChance: 0,
+    };
+    for (const p of this.parts) {
+      const e = p.markEffects;
+      if (!e) continue;
+      if (e.regenHpPerSec)       agg.regenHpPerSec      += e.regenHpPerSec;
+      if (e.auraDps)             agg.auraDps            += e.auraDps;
+      if (e.auraRadius)          agg.auraRadius         = Math.max(agg.auraRadius, e.auraRadius);
+      if (e.dashEchoMs)          agg.dashEchoMs         = Math.max(agg.dashEchoMs, e.dashEchoMs);
+      if (e.gaugeFillBonus)      agg.gaugeFillBonus     += e.gaugeFillBonus;
+      if (e.lifestealPer5)       agg.lifestealPer5      += e.lifestealPer5;
+      if (e.doublePickupChance)  agg.doublePickupChance = Math.max(agg.doublePickupChance, e.doublePickupChance);
+    }
+    this.markAggregate = agg;
+  }
+
+  /**
+   * Recomputes active set bonuses from the attached parts. Stores a flat
+   * object on `this.setBonuses` that BodyPart.applyKindStats reads when
+   * recomputing weapon multipliers.
+   */
+  recomputeSetBonuses() {
+    const colors = { red: 0, green: 0, blue: 0, yellow: 0 };
+    for (const p of this.parts) {
+      if (p.color in colors) colors[p.color]++;
+    }
+    const sb = {
+      damageMult: 1,
+      speedMult: 1,
+      preferredMineBonus: 0,
+      missileAoeMult: 1,
+      turretRangeMult: 1,
+      passiveRegenHpPerSec: 0,
+      active: [],
+    };
+    for (const c of ['red', 'green', 'blue', 'yellow']) {
+      const def = SET_BONUSES[c];
+      if (def && colors[c] >= def.count) {
+        sb.active.push(def.key);
+        if (def.missileAoeMult)        sb.missileAoeMult       *= def.missileAoeMult;
+        if (def.turretRangeMult)       sb.turretRangeMult      *= def.turretRangeMult;
+        if (def.passiveRegenHpPerSec)  sb.passiveRegenHpPerSec += def.passiveRegenHpPerSec;
+        if (def.preferredMineBonus)    sb.preferredMineBonus   += def.preferredMineBonus;
+      }
+    }
+    if (colors.red >= 1 && colors.green >= 1 && colors.blue >= 1 && colors.yellow >= 1) {
+      const def = SET_BONUSES.polychrome;
+      sb.active.push(def.key);
+      sb.damageMult *= def.damageMult;
+      sb.speedMult  *= def.speedMult;
+    }
+    this.setBonuses = sb;
   }
 
   recomputeStats() {
@@ -173,7 +269,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       else if (p.kind === 'rapid') greenBonus += p.value * GREEN.speedBonusPerValue * 0.3;
     }
     const greenMult = this.boosts?.greenSpeedMult ?? 1;
-    this.speedMultiplier = 1 + greenBonus * greenMult;
+    const setSpeed = this.setBonuses?.speedMult ?? 1;
+    this.speedMultiplier = (1 + greenBonus * greenMult) * setSpeed;
 
     const extraYellow = this.boosts?.extraYellowReduction ?? 0;
     const reduction = Math.min(
@@ -209,10 +306,35 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!c) return 0;
     if (!this.speedMultiplier) this.recomputeStats();
 
-    const effective = this.preferredColor === color
-      ? amount * EVOLUTION.preferredMineMultiplier
-      : amount;
+    // Cargo Mark 4: each mining tick has a chance to double up. Apply once at
+    // the top so every downstream calculation (lifesteal, gauge, etc) sees
+    // the doubled raw amount.
+    const dblChance = this.markAggregate?.doublePickupChance ?? 0;
+    if (dblChance > 0 && Math.random() < dblChance) {
+      amount *= 2;
+      this.scene?.spawnDamageText?.(this.x - 12, this.y - 22, amount, 'heal');
+    }
+
+    // Logistics set bonus (3+ yellow) adds extra preferred-color multiplier.
+    const preferredMult = EVOLUTION.preferredMineMultiplier
+      + (this.setBonuses?.preferredMineBonus ?? 0);
+    let effective = this.preferredColor === color ? amount * preferredMult : amount;
+    // Cargo Mark 2 multiplier on all gauge fills.
+    const gaugeBonus = this.markAggregate?.gaugeFillBonus ?? 0;
+    if (gaugeBonus > 0) effective *= 1 + gaugeBonus;
     c.current += effective;
+
+    // Cargo Mark 3 lifesteal: every 5 raw units mined heals N HP.
+    const lifestealRate = this.markAggregate?.lifestealPer5 ?? 0;
+    if (lifestealRate > 0 && this.hp < this.maxHP) {
+      this._lifestealCarry = (this._lifestealCarry || 0) + amount;
+      while (this._lifestealCarry >= 5) {
+        this._lifestealCarry -= 5;
+        const heal = lifestealRate;
+        this.hp = Math.min(this.maxHP, this.hp + heal);
+        this.scene?.spawnDamageText?.(this.x + 12, this.y - 16, heal, 'heal');
+      }
+    }
 
     if (c.current >= c.cap) {
       const overflow = c.current - c.cap;
@@ -293,6 +415,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.iframeUntil = Math.max(this.iframeUntil, time + PLAYER.dashIframeMs);
       this.body.setVelocity(dd.x * PLAYER.dashSpeed, dd.y * PLAYER.dashSpeed);
       this.scene.spawnDashFx?.(this.x, this.y);
+      // Green Mark 4 "dash echo": leaves a Shockwave behind at dash start.
+      const echo = this.markAggregate?.dashEchoMs ?? 0;
+      if (echo > 0) {
+        this.scene.castShockwave?.(this.x, this.y, 140, 12, {
+          color: 0x52d97a, knockback: 0,
+        });
+      }
     }
 
     if (time < this.dashUntil) {
@@ -343,6 +472,45 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           b.pierceLeft = this.boosts.bulletPierce;
         }
         this.nextBasePulseAt = time + 1000 / rate;
+      }
+    }
+
+    // --- Mark passive ticks: regen + damage aura ---
+    const dtSec = delta / 1000;
+    const regen = (this.markAggregate?.regenHpPerSec ?? 0)
+      + (this.setBonuses?.passiveRegenHpPerSec ?? 0);
+    if (regen > 0 && this.hp < this.maxHP) {
+      this._regenCarry += regen * dtSec;
+      if (this._regenCarry >= 1) {
+        const heal = Math.floor(this._regenCarry);
+        this._regenCarry -= heal;
+        this.hp = Math.min(this.maxHP, this.hp + heal);
+      }
+    }
+    // Aura: enemies inside `auraRadius` take auraDps. Tick at ~5 Hz to avoid
+    // hammering the enemy list every frame.
+    if (this.markAggregate?.auraDps > 0 && time >= this._nextAuraAt) {
+      this._nextAuraAt = time + 200;
+      const r = this.markAggregate.auraRadius || 0;
+      if (r > 0) {
+        const tickDmg = this.markAggregate.auraDps * 0.2;
+        const r2 = r * r;
+        this.scene?.enemies?.getChildren?.().forEach((e) => {
+          if (!e || !e.active) return;
+          const dx = e.x - this.x, dy = e.y - this.y;
+          if (dx * dx + dy * dy <= r2) {
+            e.takeDamage?.(tickDmg);
+          }
+        });
+        // Faint visual pulse so the aura reads.
+        if (!this._auraPulse || !this._auraPulse.active) {
+          const c = this.scene.add.circle(this.x, this.y, r, 0x52d97a, 0.05).setDepth(-3);
+          this._auraPulse = c;
+          this.scene.tweens.add({
+            targets: c, alpha: 0, duration: 200,
+            onComplete: () => { c.destroy(); this._auraPulse = null; },
+          });
+        }
       }
     }
 

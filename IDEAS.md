@@ -178,6 +178,38 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
 - **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
 - **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.
 
+## 18. Implemented: Mark tiers + set bonuses
+
+Layers qualitative upgrades on top of the value-based evolution numbers. Built into [`BodyPart.js`](src/entities/BodyPart.js) and [`Player.js`](src/entities/Player.js); table-driven so adding a new kind / ability is a one-line config change.
+
+- **Mark tier (1..4)** is derived from a part's accumulated `value` via `MARK.thresholds` (8 / 18 / 32). `BodyPart.applyKindStats()` recomputes the mark every time the part is built or upgraded and calls `applyMarkAbilities()` to merge each MARK_ABILITIES row up to that tier into `this.markEffects`.
+- **Ability flags** are read at fire time inside `weaponInfo()` so newly-promoted parts immediately use the new behavior:
+  - `multishot`: extra projectiles in a symmetric fan (turret / rapid / missile / swarm)
+  - `pierce`: stacks with the `Splinter Rounds` draft card (turret / rapid / plasma / prism)
+  - `critChance`: rolled per shot; double damage, white tint + slightly bigger bullet (turret / rapid)
+  - `burn`: `{ dps, durMs }` payload rides on bullets / missiles; `Enemy.preUpdate()` ticks DoT at 4 Hz and shows orange damage numbers (missile / swarm)
+  - `onHitAoeRadius` + `onHitAoeDamageMult`: plasma Mark 3 splash AoE on every bullet hit
+  - `damageMult` / `fireRateMult`: pure multipliers folded into `applyKindStats`
+- **Passive ability marks** (green / yellow) are aggregated in `Player.recomputeMarkAggregate()` so the player update loop applies them in one place:
+  - `regenHpPerSec`: green Mark 2 trickle heal
+  - `auraDps` + `auraRadius`: green Mark 3 damage aura ticks at 5 Hz with a faint pulse FX
+  - `dashEchoMs`: green Mark 4 leaves a Shockwave at the dash start position
+  - `gaugeFillBonus`: yellow Mark 2 percent bonus to all gauge fills
+  - `lifestealPer5`: yellow Mark 3 heals per 5 raw units mined (gold heal numbers)
+  - `doublePickupChance`: yellow Mark 4 rolls in `addMinerals` to double the tick
+- **Mark glow**: each part above Mark 1 grows a soft outer ring tinted by mark (white M2 -> gold M3 -> orange M4), gently pulsing.
+- **Promotion FX**: `GameScene.spawnMarkPromotionFx(part)` plays a burst ring + floating `MARK II/III/IV` text + small camera shake at Mark 3+.
+
+**Set bonuses** layer composition-of-chain rewards on top of marks. `Player.recomputeSetBonuses()` runs inside `chainChanged()` and stores a flat object on `this.setBonuses`:
+
+- **Pyrotechnician** (3+ red): missile AoE x1.15. Applied at fire time so it works with Twin/Tri missile.
+- **Marksman** (3+ blue): turret range x1.15.
+- **Greased** (3+ green): +0.5 HP/s passive regen (stacks with green Mark 2).
+- **Logistics** (3+ yellow): +10% to the preferred-color mining multiplier.
+- **Polychrome** (1+ of each primary): +5% global damage and +5% global speed. Speed multiplier feeds into `recomputeStats`; damage multiplier composes into every part's damage inside `applyKindStats`.
+
+HUD parts line now shows the highest mark as `M I/II/III/IV` plus the active set keys (e.g. `[M III MARKSMAN POLYCHROME]`), so the build state is readable at a glance.
+
 ## 17. Implemented: Tier mini-bosses + biome tinting
 
 Each tier ring (1..maxTier) has a single seeded **boss** placed at ~85% of the way to the outer ring, on a different compass heading per tier so they're spread around the world.

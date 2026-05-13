@@ -913,6 +913,37 @@ export class GameScene extends Phaser.Scene {
     cam.shake(140, 0.0035);
   }
 
+  /**
+   * Mark-tier promotion banner. Plays when a BodyPart bumps to a new mark.
+   * `part.mark` is 2/3/4, each gets a more dramatic tween.
+   */
+  spawnMarkPromotionFx(part) {
+    if (!part || !part.active) return;
+    const tints = { 2: 0xcfd6e3, 3: 0xffd64a, 4: 0xff8a4a };
+    const labels = { 2: 'MARK II', 3: 'MARK III', 4: 'MARK IV' };
+    const tint = tints[part.mark] || 0xffffff;
+    const label = labels[part.mark] || `MARK ${part.mark}`;
+
+    // Burst ring around the part.
+    const ring = this.add.circle(part.x, part.y, 18, 0xffffff, 0)
+      .setStrokeStyle(4, tint, 1).setDepth(50);
+    this.tweens.add({
+      targets: ring, scale: 4.5, alpha: 0, duration: 520, ease: 'Cubic.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+    // Floating banner.
+    const t = this.add.text(part.x, part.y - 28, label, {
+      fontFamily: 'monospace', fontSize: '14px',
+      color: part.mark >= 3 ? '#ffd64a' : '#dfe6f2',
+      stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5, 1).setDepth(60);
+    this.tweens.add({
+      targets: t, y: t.y - 40, alpha: 0, duration: 1100,
+      onComplete: () => t.destroy(),
+    });
+    if (part.mark >= 3) this.cameras.main.shake(80, 0.003);
+  }
+
   spawnBoosterFx(x, y, color) {
     const ring = this.add.circle(x, y, 8, 0xffffff, 0);
     ring.setStrokeStyle(2, COLORS[color], 1);
@@ -1028,6 +1059,27 @@ export class GameScene extends Phaser.Scene {
     bullet._hits.add(enemy);
     enemy.takeDamage?.(bullet.damage);
     this.spawnDamageText(enemy.x, enemy.y - enemy.displayHeight / 2, bullet.damage, 'enemy');
+    // Burn payload (Mark 3 missile / swarm only set this on missiles; plasma
+    // Mark 3 sets onHitAoe* below). Forward to enemy if present.
+    if (bullet.burn) enemy.applyBurn?.(bullet.burn);
+    // Plasma Mark 3 on-hit AoE: small splash damage in a radius around the hit.
+    if (bullet.onHitAoeRadius) {
+      const r2 = bullet.onHitAoeRadius * bullet.onHitAoeRadius;
+      this.enemies?.getChildren?.().forEach((e) => {
+        if (!e || !e.active || e === enemy) return;
+        const dx = e.x - bullet.x, dy = e.y - bullet.y;
+        if (dx * dx + dy * dy <= r2) {
+          e.takeDamage?.(bullet.onHitAoeDamage);
+        }
+      });
+      // Tiny ring fx so the splash reads.
+      const ring = this.add.circle(bullet.x, bullet.y, 6, 0xb14aff, 0)
+        .setStrokeStyle(2, 0xb14aff, 0.85).setDepth(40);
+      this.tweens.add({
+        targets: ring, scale: bullet.onHitAoeRadius / 6, alpha: 0,
+        duration: 240, onComplete: () => ring.destroy(),
+      });
+    }
     if ((bullet.pierceLeft || 0) > 0) {
       bullet.pierceLeft--;
       // Slight visual feedback so piercing reads.

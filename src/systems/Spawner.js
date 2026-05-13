@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import { MINERAL, PICKUP, TIER, ENEMY, COLOR_KEYS, LANDMARK, NEUTRAL } from '../config.js';
+import { MINERAL, PICKUP, TIER, ENEMY, COLOR_KEYS, LANDMARK, NEUTRAL, PATROL } from '../config.js';
 import { MineralDeposit } from '../entities/MineralDeposit.js';
 import { BodyPartPickup } from '../entities/BodyPartPickup.js';
 import { BossEnemy } from '../entities/enemies/BossEnemy.js';
 import { BoulderPit } from '../entities/world/BoulderPit.js';
 import { NeutralMiner } from '../entities/NeutralMiner.js';
+import { PatrollerEnemy } from '../entities/enemies/PatrollerEnemy.js';
 
 // Owns mineral/pickup/enemy zone seeding and respawn-elsewhere behavior.
 export class Spawner {
@@ -27,6 +28,36 @@ export class Spawner {
     this.seedBosses();
     this.seedLandmarks();
     this.seedNeutralMiners();
+    this.seedPatrollers();
+  }
+
+  /**
+   * Per tier, drop a handful of patrol routes. Each route is `waypointCount`
+   * points scattered around a route center, walked in order. PatrollerEnemy
+   * cycles through them at patrol speed and chases the player when seen.
+   */
+  seedPatrollers() {
+    this.patrollers = this.patrollers || [];
+    for (let tier = 1; tier <= TIER.maxTier; tier++) {
+      const ringInner = TIER.safeRadius + (tier - 1) * TIER.ringWidth;
+      const ringOuter = TIER.safeRadius + tier * TIER.ringWidth;
+      for (let i = 0; i < PATROL.perTier; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Phaser.Math.FloatBetween(ringInner + 200, ringOuter - 200);
+        const cx = this.scene.worldCenter.x + Math.cos(a) * r;
+        const cy = this.scene.worldCenter.y + Math.sin(a) * r;
+        const wpCount = Phaser.Math.Between(PATROL.waypointCount[0], PATROL.waypointCount[1]);
+        const route = [];
+        for (let w = 0; w < wpCount; w++) {
+          const wa = (w / wpCount) * Math.PI * 2 + Math.random() * 0.5;
+          const wr = Phaser.Math.FloatBetween(PATROL.routeRadius * 0.4, PATROL.routeRadius);
+          route.push({ x: cx + Math.cos(wa) * wr, y: cy + Math.sin(wa) * wr });
+        }
+        const p = new PatrollerEnemy(this.scene, route, tier);
+        this.scene.enemies.add(p);
+        this.patrollers.push(p);
+      }
+    }
   }
 
   /**

@@ -25,6 +25,7 @@ import { Tiers } from '../systems/Tiers.js';
 import { Spawner } from '../systems/Spawner.js';
 import { Targeting } from '../systems/Targeting.js';
 import { HunterSpawner } from '../systems/HunterSpawner.js';
+import { ZoneSystem } from '../systems/ZoneSystem.js';
 
 // localStorage key for best-run persistence.
 const BEST_RUN_KEY = 'miner-snake:best-run-v1';
@@ -375,6 +376,7 @@ export class GameScene extends Phaser.Scene {
     this.targeting = new Targeting(this);
     this.spawner = new Spawner(this, this.tiers);
     this.hunterSpawner = new HunterSpawner(this);
+    this.zoneSystem = new ZoneSystem(this);
 
     // Player
     this.player = new Player(this, this.worldCenter.x, this.worldCenter.y);
@@ -1365,6 +1367,9 @@ export class GameScene extends Phaser.Scene {
     // Clear before restart so the UIScene cannot re-show the recap on the
     // frames between scene.restart() being queued and create() running.
     this.deathPayload = null;
+    // Zone visuals live outside any physics group, so clean them up
+    // explicitly before scene.restart re-instantiates everything.
+    this.zoneSystem?.shutdown?.();
     this.scene.restart();
   }
 
@@ -1381,6 +1386,7 @@ export class GameScene extends Phaser.Scene {
 
     this.player.update(time, delta);
     this.hunterSpawner?.update(time);
+    this.zoneSystem?.update(time, delta);
 
     // Body parts follow trail
     const parts = this.player.parts;

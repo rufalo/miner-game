@@ -354,6 +354,105 @@ export const UPGRADES = {
 };
 
 /**
+ * DYNAMIC ZONES
+ *
+ * A roaming roster of timed zones the ZoneSystem spawns periodically. Each
+ * zone has a lifecycle (grow -> stable -> shrink -> gone) and a `type` that
+ * drives its effect:
+ *
+ *   danger : tints orange, ticks DoT to anything inside (player + enemies)
+ *   bloom  : tints green, periodically spawns extra mineral deposits inside
+ *   storm  : tints purple, slows movement + occasional lightning damage
+ *
+ * Zones add agency: avoid danger spots (or kite enemies into them), camp
+ * bloom spots while they last, push through storms for shortcuts. They
+ * arrive without explicit player input so the world keeps changing.
+ */
+export const ZONES = {
+  // System-wide pacing.
+  maxActive: 6,                // hard cap on simultaneous zones
+  spawnIntervalMs: 12000,      // base time between spawn attempts
+  initialDelayMs: 8000,        // first zone shows up this long after run start
+
+  // Common lifecycle (per-type overrides below).
+  growMs:   2500,
+  shrinkMs: 2500,
+
+  // Per-type tuning. `weight` biases the spawn lottery so bloom is most
+  // common, danger second, storm rarest.
+  types: {
+    danger: {
+      weight: 3,
+      radius: 180,
+      radiusJitter: 60,
+      stableMs: [22000, 38000],
+      tickHz: 4,
+      dpsToPlayer: 8,
+      dpsToEnemies: 14,        // a kite-into-zone tactic should work
+      tintFill: 0xff5a2a,
+      tintRing: 0xff8a3a,
+      fillAlpha: 0.10,
+      ringAlpha: 0.55,
+      label: 'TOXIC POOL',
+    },
+    bloom: {
+      weight: 4,
+      radius: 200,
+      radiusJitter: 60,
+      stableMs: [18000, 30000],
+      spawnIntervalMs: 4500,    // new mineral chunk inside every X ms
+      maxMineralsInside: 5,
+      mineralValueMin: 3,
+      mineralValueMax: 7,
+      tintFill: 0x6dffae,
+      tintRing: 0x8aff7a,
+      fillAlpha: 0.10,
+      ringAlpha: 0.50,
+      label: 'BLOOM',
+    },
+    storm: {
+      weight: 2,
+      radius: 230,
+      radiusJitter: 60,
+      stableMs: [16000, 26000],
+      tickHz: 1,                // 1 Hz lightning strike
+      strikeDamage: 10,
+      strikeChance: 0.45,       // chance per tick a strike happens at all
+      slowMult: 0.65,           // player speed mult while inside
+      tintFill: 0x7a6bff,
+      tintRing: 0xb0a8ff,
+      fillAlpha: 0.08,
+      ringAlpha: 0.55,
+      label: 'STORM',
+    },
+  },
+};
+
+/**
+ * PATROL ENEMIES
+ *
+ * Roaming guards that walk a fixed loop until they detect the player. Once
+ * triggered they switch to pursuit; if they lose sight for long enough they
+ * walk back to their route and resume the patrol.
+ */
+export const PATROL = {
+  perTier: 2,                  // patroller routes seeded per tier ring
+  waypointCount: [3, 5],       // patrols pick this many waypoints
+  routeRadius: 380,            // max distance any waypoint sits from route center
+  speedPatrol: 75,
+  speedChase: 165,
+  hpBase: 28,
+  hpPerTier: 14,
+  damage: 8,
+  contactCooldownMs: 600,
+  detectRange: 320,            // distance at which patroller spots the player
+  loseSightRange: 540,         // beyond this, alert timer ticks down
+  alertDecayMs: 2800,          // ms outside loseSightRange before reverting to patrol
+  waypointArriveDist: 28,
+  // Visual: a brief ! symbol when alerted, ? when losing track.
+};
+
+/**
  * Automatic world hazards / authored landmarks. Each tier ring seeds a few
  * boulder pits that telegraph + lob arcing AoE rocks at the player.
  *

@@ -33,6 +33,7 @@ export class BootScene extends Phaser.Scene {
     this.makeEnemyTex('enemy_splitter', 0xff8a44, 'cluster');
     this.makeEnemyTex('enemy_sniper',   0x9affff, 'cross');
     this.makeEnemyTex('enemy_bomber',   0xff6a3a, 'mine');
+    this.makeEnemyTex('enemy_patroller', 0xb56dff, 'arrow');
     this.makeBossTex('enemy_boss',      0xff3a3a);
 
     // World features (landmarks + neutral actors).
@@ -213,6 +214,27 @@ export class BootScene extends Phaser.Scene {
         // Central white dot (fuse).
         g.fillStyle(0xffffff, 0.95);
         g.fillCircle(half, half, 4);
+        break;
+      }
+      case 'arrow': {
+        // Patroller: a directional chevron + small ring around it so it reads
+        // as "this thing is looking somewhere" (it rotates to match its
+        // current heading at runtime).
+        g.lineStyle(3, 0x111722, 1);
+        g.strokeCircle(half, half, half - 6);
+        g.fillCircle(half, half, half - 6);
+        // Chevron pointing right (sprite rotates to actual heading at runtime).
+        g.fillStyle(0x111722, 1);
+        const pts = [
+          { x: half + 14, y: half },
+          { x: half - 6,  y: half - 12 },
+          { x: half - 2,  y: half },
+          { x: half - 6,  y: half + 12 },
+        ];
+        g.fillPoints(pts, true);
+        // Eye pip so even when stationary the patroller reads as "alive".
+        g.fillStyle(0xffffff, 0.9);
+        g.fillCircle(half - 10, half - 8, 2.5);
         break;
       }
       case 'worker': {

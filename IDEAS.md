@@ -180,6 +180,74 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
 - **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
 - **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.
 
+## 21. Implemented: Dynamic zones + patrollers (player agency / world dynamics)
+
+Two systems shipping together; both push the world to act on its own and give the player meaningful choices about *where* to be.
+
+### Player ask
+
+> i want some sort of zones to appear, grow or disappear. like danger areas or areas that damage the player or areas that grow more minerals.
+>
+> i also want some kind of patrolling enemies where if the player gets near them then they start following them.
+
+### Dynamic zones (`src/systems/ZoneSystem.js`)
+
+Roster of timed world zones. A single `ZoneSystem` instance lives on `GameScene`, ticks each frame from `GameScene.update`, and runs a small lifecycle on every zone:
+
+```
+grow -> stable -> shrink -> gone
+```
+
+Spawn picks a type from a weighted lottery (`ZONES.types.<t>.weight`), places it near the player's current ring (so it actually interacts), and creates two `add.circle` graphics for fill + ring. Visuals lerp with the radius so growth + decay feel organic; ring scales with a small sine pulse so live zones read at a glance.
+
+Three types:
+
+| Type | Effect path | Tactic notes |
+|---|---|---|
+| `danger` (toxic pool) | tick at `tickHz` Hz: damages player + every enemy in radius | kiting enemies into one is a real strategy because `dpsToEnemies > dpsToPlayer` |
+| `bloom`               | every `spawnIntervalMs`, picks a random point inside and calls `Spawner.spawnMineral` (random color, value 3-7), capped at `maxMineralsInside` | camp it while it lasts; great way to evolve a specific color |
+| `storm`               | while inside, sets `playerSpeedMult` (read by `Player.update`); on each `tickHz`-tick rolls `strikeChance` for a lightning strike | slows you AND zaps - bad place to be cornered |
+
+Implementation choices worth flagging:
+
+- **No physics group**: zones are pure-data records with two graphics objects. Effects are AABB-radius queries on demand. Cheap and dodges body interactions entirely.
+- **Slow propagation via `playerSpeedMult`** on the system: Player.update multiplies its speed by `scene.zoneSystem.playerSpeedMult` each frame. ZoneSystem resets it to 1 at the start of its tick, so leaving a storm zone restores speed automatically.
+- **Spawn placement** uses the player's current radial distance ± `TIER.ringWidth`, with a min 240 px standoff so a zone never appears on top of the player.
+- **Shutdown hook** runs on `GameScene.restartGame` so visuals don't leak across runs.
+
+### Patrollers (`src/entities/enemies/PatrollerEnemy.js`)
+
+Extend `Enemy` so they reuse physics body, takeDamage flash, burn ticks, and `onDeath -> scene.onEnemyKilled`. Their AI is a 2-state machine:
+
+```
+patrol -> chase  (player inside detectRange)
+chase  -> patrol (player past loseSightRange for alertDecayMs)
+```
+
+`Spawner.seedPatrollers` seeds `PATROL.perTier` routes per ring. Each route is a random `waypointCount` points scattered in a `routeRadius` disk around a route center. The patroller cycles `route` in order, stops at each waypoint (`waypointArriveDist`), advances to the next, wraps at the end.
+
+Visual cues so the AI state reads in the moment:
+
+- **Red `!`** floats above the head when first aggro'd.
+- **Gray `?`** floats above the head when the player is past `loseSightRange` and the alert decay timer is counting down.
+- Sprite rotates to its movement heading on the world layer.
+- Minimap chevron: purple line + dot when patrolling, red when chasing. The line direction points where the patroller is currently looking, so the player can sneak past one by approaching from behind.
+
+### Tunables (in `src/config.js`)
+
+- `ZONES.maxActive`, `ZONES.spawnIntervalMs`, `ZONES.growMs`, `ZONES.shrinkMs`.
+- Per-type tuning lives under `ZONES.types.<type>` (radius, stableMs range, fill/ring tints + alphas, type-specific knobs like `dpsToPlayer`, `mineralValueMin/Max`, `slowMult`).
+- `PATROL.perTier`, `PATROL.waypointCount`, `PATROL.routeRadius`, `PATROL.speedPatrol`/`Chase`, `PATROL.detectRange`/`loseSightRange`, `PATROL.alertDecayMs`.
+
+### Wishlist (next-step / not yet shipped)
+
+- **Zone telegraph**: have zones flicker a faint preview at their spawn point for ~1 s before they start growing, so the player has *some* warning before a toxic pool drops near them.
+- **More zone types**: a *gravity well* that pulls the player toward its center, a *quicksand* that slows movement and locks the dash, a *speed lane* that boosts movement, a *fog* that drops detect ranges on patrollers/snipers.
+- **Zone interactions**: bloom inside danger = the bloom minerals are pre-tinted "irradiated" and worth more value but pop the gauge to a *biased* essence at combine time.
+- **Patroller groups**: small squads of 2-3 patrollers on the same route, so seeing one means there's another nearby.
+- **Patroller alert chain**: an alerted patroller pings any other patroller within X px, propagating chase state across the route.
+- **Visible vision cone**: draw a thin arc in front of each patroller that *only* triggers detection when crossed, instead of a 360 detect radius.
+
 ## 20. Implemented: Recipe / cauldron tail (major redesign)
 
 Body parts are no longer permanent weapon platforms - they are **ingredients** in a **recipe**. The snake tail is now a cauldron: 4 ingredients auto-combine into a **player upgrade**, then the tail empties.

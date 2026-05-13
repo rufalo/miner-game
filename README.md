@@ -161,6 +161,27 @@ Sprinkled across every ring (and a couple inside the safe zone) are **non-hostil
 - Killing one drops a **small mineral chunk** of a random color *plus* the standard enemy-kill mineral, so they're a meaningful tactical choice: ignore them and you keep the peace, attack them and you get loot but make a new hostile.
 - On the minimap they show as teal dots (peaceful) or hot red dots (enraged).
 
+### Dynamic zones (timed weather)
+
+Periodically the world spawns a **timed zone** somewhere near the player's current ring. Zones grow over ~2.5 s, stay at full size for 16–38 s, then shrink and disappear. Up to 6 can be active at once.
+
+| Type | Look | Effect | Tactic |
+|---|---|---|---|
+| **TOXIC POOL** | Orange tinted disk + ring | Ticks **8 DPS to the player** and **14 DPS to enemies** inside (4 Hz) | Avoid — or kite hunters / patrollers through one for free damage |
+| **BLOOM** | Green tinted disk + ring | Spawns a fresh mineral chunk inside every ~4.5 s, up to 5 at a time | Camp it while it lasts; great for evolving a specific color |
+| **STORM** | Purple tinted disk + ring | **Slows player movement to 65 %** inside, and ~45 % chance per second to **strike for 10 dmg** | Push through only when needed; better to wait it out or go around |
+
+Zones show on the minimap as filled translucent circles in their tint. Bloom is the most common; storm is rarest.
+
+### Patrollers
+
+Each tier ring also seeds a few **patrol routes**: purple chevron enemies that walk a 3–5 point loop at a steady pace.
+
+- **Detect range ~320 px** — if you cross into it they pop a red `!` and switch to **chase** at much higher speed.
+- **Lose-sight range ~540 px** — stay out of their view for ~2.8 s and they show a gray `?`, then walk back to their route and resume patrol.
+- Their heading is shown on the minimap as a short line out of the marker (purple while patrolling, red while chasing) so you can plan an approach.
+- They have more HP and contact damage than normal enemies, so engaging one is a real decision.
+
 ## Threats
 
 Two kinds of pressure:

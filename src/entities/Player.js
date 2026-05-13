@@ -384,7 +384,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // Lock velocity during dash (don't let WASD slow it down).
       // setVelocity already set above when dash started; keep it constant.
     } else {
-      const speed = PLAYER.baseSpeed * (this.speedMultiplier || 1);
+      // World zones can slow the player (storm zones). ZoneSystem refreshes
+      // this every frame in its update tick.
+      const zoneMult = this.scene?.zoneSystem?.playerSpeedMult ?? 1;
+      const speed = PLAYER.baseSpeed * (this.speedMultiplier || 1) * zoneMult;
       this.setVelocity(dir.x * speed, dir.y * speed);
     }
 

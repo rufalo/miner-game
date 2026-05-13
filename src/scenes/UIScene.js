@@ -575,7 +575,30 @@ export class UIScene extends Phaser.Scene {
         const peaceful = e.neutral !== false;
         g.fillStyle(peaceful ? 0x8aa6cf : 0xff5252, 0.95);
         g.fillCircle(e.x * k, e.y * k, peaceful ? 1.5 : 2.2);
+      } else if (key === 'enemy_patroller') {
+        // Purple chevron tick that brightens when chasing. Tiny line shows
+        // current heading so the player can see which way it's looking.
+        const chasing = e.state === 'chase';
+        const px = e.x * k, py = e.y * k;
+        g.fillStyle(chasing ? 0xff5b6d : 0xb56dff, 0.95);
+        g.fillCircle(px, py, 2);
+        g.lineStyle(1, chasing ? 0xff5b6d : 0xb56dff, 0.8);
+        const r = e.rotation || 0;
+        g.lineBetween(px, py, px + Math.cos(r) * 4, py + Math.sin(r) * 4);
       }
+    }
+
+    // Dynamic zones: filled translucent circle in the zone's tint. Draw
+    // before landmarks/bosses so they sit underneath the more critical
+    // markers.
+    const dynZones = this.gs.zoneSystem?.zones ?? [];
+    for (const z of dynZones) {
+      if (z.radius < 30) continue;
+      const zr = Math.max(2, z.radius * k);
+      g.fillStyle(z.def.tintFill, 0.30);
+      g.fillCircle(z.x * k, z.y * k, zr);
+      g.lineStyle(1, z.def.tintRing, 0.85);
+      g.strokeCircle(z.x * k, z.y * k, zr);
     }
 
     // Landmarks (boulder pits): brown ring on the minimap. Telegraph state

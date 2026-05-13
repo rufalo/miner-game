@@ -3,6 +3,7 @@ import {
   PLAYER, COLOR_KEYS, COLORS, GREEN, EVOLUTION, COMBO, SHOCKWAVE, OVERCHARGE,
   SET_BONUSES,
 } from '../config.js';
+import { tickArmaments, tickPassives, absorbDamage } from '../systems/RecipeUpgrades.js';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
@@ -35,12 +36,36 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.history = [];
     this.historyTimer = 0;
 
-    // Body parts (BodyPart instances) attached to the snake
+    // Body parts (BodyPart instances) attached to the snake. Each part is
+    // a RECIPE INGREDIENT now (color + value); they trail visually but do
+    // not fire weapons or grant passive stats on their own. When the tail
+    // hits `RECIPE.slots`, the recipe combines and grants a player upgrade.
     this.parts = [];
 
-    // Combo state.
-    this.branchMode = false;           // split-tail unlocked
-    this.rainbowSpawned = false;       // PRISM orbital spawned
+    // Recipe-granted persistent state.
+    this.armaments = [];               // installed UPGRADES entries with tiers
+    this.recipeBoosts = {              // recomputed in RecipeUpgrades.recomputePassives
+      speedMult: 1,
+      mineRateMult: 1,
+      gaugeFillBonus: 0,
+      dashCdMult: 1,
+      dashIframeBonusMs: 0,
+      damageReduction: 0,
+      hpRegenPerSec: 0,
+      overchargeDurationBonusMs: 0,
+      overchargeCdMult: 1,
+      dashStrike: null,
+    };
+    this.maxShield = 0;
+    this.shield = 0;
+    this.shieldRegenPerSec = 0;
+    this.shieldRegenDelayMs = 3500;
+    this.shieldHitAt = 0;
+
+    // Legacy combo state (kept zeroed so existing call sites stay safe; the
+    // pre-recipe combo/hybrid path is no longer triggered).
+    this.branchMode = false;
+    this.rainbowSpawned = false;
 
     // Mark-tier aggregated passive effects (sum of every part's markEffects).
     // Refreshed inside chainChanged() so adds / upgrades both update it.
@@ -194,95 +219,41 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Sums up every part's Mark-granted passive effects so the Player.update
-   * loop can apply them in one place (HP regen, aura, gauge fill bonus, etc).
+   * Recipe redesign note:
+   * Mark / set bonus aggregation is intentionally a no-op now. Body parts
+   * are inert ingredients; the passive buffs they used to grant (regen,
+   * aura, lifesteal, etc) moved to the recipe upgrade catalog so the same
+   * effects are achievable by combining the right ingredients.
+   *
+   * The functions are kept (returning safe defaults) so any stale call
+   * sites in GameScene / UIScene don't crash during the transition.
    */
   recomputeMarkAggregate() {
-    const agg = {
-      regenHpPerSec: 0,
-      auraDps: 0,
-      auraRadius: 0,
-      dashEchoMs: 0,
-      gaugeFillBonus: 0,
-      lifestealPer5: 0,
-      doublePickupChance: 0,
+    this.markAggregate = {
+      regenHpPerSec: 0, auraDps: 0, auraRadius: 0, dashEchoMs: 0,
+      gaugeFillBonus: 0, lifestealPer5: 0, doublePickupChance: 0,
     };
-    for (const p of this.parts) {
-      const e = p.markEffects;
-      if (!e) continue;
-      if (e.regenHpPerSec)       agg.regenHpPerSec      += e.regenHpPerSec;
-      if (e.auraDps)             agg.auraDps            += e.auraDps;
-      if (e.auraRadius)          agg.auraRadius         = Math.max(agg.auraRadius, e.auraRadius);
-      if (e.dashEchoMs)          agg.dashEchoMs         = Math.max(agg.dashEchoMs, e.dashEchoMs);
-      if (e.gaugeFillBonus)      agg.gaugeFillBonus     += e.gaugeFillBonus;
-      if (e.lifestealPer5)       agg.lifestealPer5      += e.lifestealPer5;
-      if (e.doublePickupChance)  agg.doublePickupChance = Math.max(agg.doublePickupChance, e.doublePickupChance);
-    }
-    this.markAggregate = agg;
   }
 
-  /**
-   * Recomputes active set bonuses from the attached parts. Stores a flat
-   * object on `this.setBonuses` that BodyPart.applyKindStats reads when
-   * recomputing weapon multipliers.
-   */
   recomputeSetBonuses() {
-    const colors = { red: 0, green: 0, blue: 0, yellow: 0 };
-    for (const p of this.parts) {
-      if (p.color in colors) colors[p.color]++;
-    }
-    const sb = {
-      damageMult: 1,
-      speedMult: 1,
-      preferredMineBonus: 0,
-      missileAoeMult: 1,
-      turretRangeMult: 1,
-      passiveRegenHpPerSec: 0,
+    this.setBonuses = {
+      damageMult: 1, speedMult: 1, preferredMineBonus: 0,
+      missileAoeMult: 1, turretRangeMult: 1, passiveRegenHpPerSec: 0,
       active: [],
     };
-    for (const c of ['red', 'green', 'blue', 'yellow']) {
-      const def = SET_BONUSES[c];
-      if (def && colors[c] >= def.count) {
-        sb.active.push(def.key);
-        if (def.missileAoeMult)        sb.missileAoeMult       *= def.missileAoeMult;
-        if (def.turretRangeMult)       sb.turretRangeMult      *= def.turretRangeMult;
-        if (def.passiveRegenHpPerSec)  sb.passiveRegenHpPerSec += def.passiveRegenHpPerSec;
-        if (def.preferredMineBonus)    sb.preferredMineBonus   += def.preferredMineBonus;
-      }
-    }
-    if (colors.red >= 1 && colors.green >= 1 && colors.blue >= 1 && colors.yellow >= 1) {
-      const def = SET_BONUSES.polychrome;
-      sb.active.push(def.key);
-      sb.damageMult *= def.damageMult;
-      sb.speedMult  *= def.speedMult;
-    }
-    this.setBonuses = sb;
   }
 
   recomputeStats() {
-    let greenBonus = 0;
-    let yellowCount = 0;
-    for (const p of this.parts) {
-      if (p.color === 'green') greenBonus += p.value * GREEN.speedBonusPerValue;
-      else if (p.color === 'yellow') yellowCount++;
-      // Hybrid bonus contributions:
-      else if (p.kind === 'rapid') greenBonus += p.value * GREEN.speedBonusPerValue * 0.3;
-    }
+    // Movement speed comes from the recipe Speed upgrade now (+ draft boosts).
+    // Body parts no longer contribute passive speed/cargo - that flavor moved
+    // to the recipe ingredient + upgrade catalog.
     const greenMult = this.boosts?.greenSpeedMult ?? 1;
-    const setSpeed = this.setBonuses?.speedMult ?? 1;
-    this.speedMultiplier = (1 + greenBonus * greenMult) * setSpeed;
+    const recipeSpeed = this.recipeBoosts?.speedMult ?? 1;
+    this.speedMultiplier = greenMult * recipeSpeed;
 
-    const extraYellow = this.boosts?.extraYellowReduction ?? 0;
-    const reduction = Math.min(
-      EVOLUTION.yellowReductionCap,
-      yellowCount * EVOLUTION.yellowThresholdReduction + extraYellow
-    );
-
-    // Threshold per color = baseThreshold
-    //   + per-color ramp (rewards switching colors)
-    //   + global ramp from total evolutions across all colors (every upgrade
-    //     makes future evolutions cost more, regardless of which color),
-    //   minus the yellow reduction.
+    // Evolution gauge thresholds. No more yellow-part discount (the Harvest
+    // recipe upgrade applies a gauge fill bonus instead, which is simpler
+    // and more legible).
     let totalEvos = 0;
     for (const c of COLOR_KEYS) totalEvos += this.evolutions[c] || 0;
     for (const color of COLOR_KEYS) {
@@ -291,7 +262,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         EVOLUTION.baseThreshold +
         EVOLUTION.thresholdPerEvolution * evos +
         EVOLUTION.thresholdPerGlobalEvolution * totalEvos;
-      this.cargo[color].cap = base * (1 - reduction);
+      this.cargo[color].cap = base;
     }
   }
 
@@ -306,40 +277,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!c) return 0;
     if (!this.speedMultiplier) this.recomputeStats();
 
-    // Cargo Mark 4: each mining tick has a chance to double up. Apply once at
-    // the top so every downstream calculation (lifesteal, gauge, etc) sees
-    // the doubled raw amount.
-    const dblChance = this.markAggregate?.doublePickupChance ?? 0;
-    if (dblChance > 0 && Math.random() < dblChance) {
-      amount *= 2;
-      this.scene?.spawnDamageText?.(this.x - 12, this.y - 22, amount, 'heal');
-    }
-
-    // Logistics set bonus (3+ yellow) adds extra preferred-color multiplier.
-    const preferredMult = EVOLUTION.preferredMineMultiplier
-      + (this.setBonuses?.preferredMineBonus ?? 0);
+    const preferredMult = EVOLUTION.preferredMineMultiplier;
     let effective = this.preferredColor === color ? amount * preferredMult : amount;
-    // Cargo Mark 2 multiplier on all gauge fills.
-    const gaugeBonus = this.markAggregate?.gaugeFillBonus ?? 0;
+    // Harvest upgrade: percent bonus on every gauge fill.
+    const gaugeBonus = this.recipeBoosts?.gaugeFillBonus ?? 0;
     if (gaugeBonus > 0) effective *= 1 + gaugeBonus;
     c.current += effective;
-
-    // Cargo Mark 3 lifesteal: every 5 raw units mined heals N HP.
-    const lifestealRate = this.markAggregate?.lifestealPer5 ?? 0;
-    if (lifestealRate > 0 && this.hp < this.maxHP) {
-      this._lifestealCarry = (this._lifestealCarry || 0) + amount;
-      while (this._lifestealCarry >= 5) {
-        this._lifestealCarry -= 5;
-        const heal = lifestealRate;
-        this.hp = Math.min(this.maxHP, this.hp + heal);
-        this.scene?.spawnDamageText?.(this.x + 12, this.y - 16, heal, 'heal');
-      }
-    }
 
     if (c.current >= c.cap) {
       const overflow = c.current - c.cap;
       this.scene.triggerEvolution?.(color);
-      // recomputeStats() inside triggerEvolution updates `cap`; restart gauge.
       this.cargo[color].current = Math.min(overflow, this.cargo[color].cap * 0.95);
     }
     return amount;
@@ -362,7 +309,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   takeDamage(amount, now) {
     if (now < this.iframeUntil) return;
-    this.hp -= amount;
+    // Armor / damage reduction (capped by recomputePassives at 75%).
+    const dr = this.recipeBoosts?.damageReduction ?? 0;
+    let dmg = amount * (1 - dr);
+    // Shield first, then HP.
+    dmg = absorbDamage(this, dmg, now);
+    if (dmg > 0) this.hp -= dmg;
     this.iframeUntil = now + PLAYER.invulnFlashMs;
     this.scene.cameras.main.shake(80, 0.004);
     this.setTintFill(0xffffff);
@@ -410,16 +362,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const spaceJustPressed = Phaser.Input.Keyboard.JustDown(this.keys.SPACE);
     if (spaceJustPressed && time >= this.dashReadyAt) {
       const dd = dir.lengthSq() > 0 ? dir : this.lastDir;
+      const dashCdMult = (this.boosts?.dashCooldownMult ?? 1)
+        * (this.recipeBoosts?.dashCdMult ?? 1);
+      const dashIframeBonus = this.recipeBoosts?.dashIframeBonusMs ?? 0;
       this.dashUntil = time + PLAYER.dashDurationMs;
-      this.dashReadyAt = time + PLAYER.dashCooldownMs * (this.boosts?.dashCooldownMult ?? 1);
-      this.iframeUntil = Math.max(this.iframeUntil, time + PLAYER.dashIframeMs);
+      this.dashReadyAt = time + PLAYER.dashCooldownMs * dashCdMult;
+      this.iframeUntil = Math.max(this.iframeUntil,
+        time + PLAYER.dashIframeMs + dashIframeBonus);
       this.body.setVelocity(dd.x * PLAYER.dashSpeed, dd.y * PLAYER.dashSpeed);
       this.scene.spawnDashFx?.(this.x, this.y);
-      // Green Mark 4 "dash echo": leaves a Shockwave behind at dash start.
-      const echo = this.markAggregate?.dashEchoMs ?? 0;
-      if (echo > 0) {
-        this.scene.castShockwave?.(this.x, this.y, 140, 12, {
-          color: 0x52d97a, knockback: 0,
+      // Recipe DASH STRIKE upgrade: shockwave at dash start.
+      const ds = this.recipeBoosts?.dashStrike;
+      if (ds) {
+        this.scene.castShockwave?.(this.x, this.y, ds.radius, ds.damage, {
+          color: 0xff9aa0, knockback: 0,
         });
       }
     }
@@ -445,11 +401,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.scene.castShockwave?.(this.x, this.y, radius, dmg);
     }
 
-    // E: Overcharge. Buff window: 2x fire rate + 1.2x damage on every weapon.
-    // Effect itself is applied where pulse / body parts read their stats.
+    // E: Overcharge. Recipe Overcharge upgrade extends duration / shortens cd.
     if (Phaser.Input.Keyboard.JustDown(this.keys.E) && time >= this.overchargeReadyAt) {
-      const dur = OVERCHARGE.durationMs + (this.boosts?.overchargeDurationBonusMs ?? 0);
-      const cd = OVERCHARGE.cooldownMs * (this.boosts?.overchargeCooldownMult ?? 1);
+      const durBonus = (this.boosts?.overchargeDurationBonusMs ?? 0)
+        + (this.recipeBoosts?.overchargeDurationBonusMs ?? 0);
+      const cdMult = (this.boosts?.overchargeCooldownMult ?? 1)
+        * (this.recipeBoosts?.overchargeCdMult ?? 1);
+      const dur = OVERCHARGE.durationMs + durBonus;
+      const cd = OVERCHARGE.cooldownMs * cdMult;
       this.overchargeUntil = time + dur;
       this.overchargeReadyAt = time + cd;
       this.scene.castOvercharge?.(this, dur);
@@ -475,44 +434,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    // --- Mark passive ticks: regen + damage aura ---
-    const dtSec = delta / 1000;
-    const regen = (this.markAggregate?.regenHpPerSec ?? 0)
-      + (this.setBonuses?.passiveRegenHpPerSec ?? 0);
-    if (regen > 0 && this.hp < this.maxHP) {
-      this._regenCarry += regen * dtSec;
-      if (this._regenCarry >= 1) {
-        const heal = Math.floor(this._regenCarry);
-        this._regenCarry -= heal;
-        this.hp = Math.min(this.maxHP, this.hp + heal);
-      }
-    }
-    // Aura: enemies inside `auraRadius` take auraDps. Tick at ~5 Hz to avoid
-    // hammering the enemy list every frame.
-    if (this.markAggregate?.auraDps > 0 && time >= this._nextAuraAt) {
-      this._nextAuraAt = time + 200;
-      const r = this.markAggregate.auraRadius || 0;
-      if (r > 0) {
-        const tickDmg = this.markAggregate.auraDps * 0.2;
-        const r2 = r * r;
-        this.scene?.enemies?.getChildren?.().forEach((e) => {
-          if (!e || !e.active) return;
-          const dx = e.x - this.x, dy = e.y - this.y;
-          if (dx * dx + dy * dy <= r2) {
-            e.takeDamage?.(tickDmg);
-          }
-        });
-        // Faint visual pulse so the aura reads.
-        if (!this._auraPulse || !this._auraPulse.active) {
-          const c = this.scene.add.circle(this.x, this.y, r, 0x52d97a, 0.05).setDepth(-3);
-          this._auraPulse = c;
-          this.scene.tweens.add({
-            targets: c, alpha: 0, duration: 200,
-            onComplete: () => { c.destroy(); this._auraPulse = null; },
-          });
-        }
-      }
-    }
+    // --- Recipe armaments + passive upgrades (replaces the old per-part
+    //     weapon + mark tick path). Weapons fire from the player center;
+    //     passives (shield regen, HP regen, burn aura) tick alongside.
+    tickArmaments(this, this.scene, time, delta);
+    tickPassives(this, this.scene, time, delta);
 
     // --- history buffer (snake trail) ---
     // Newest sample at index 0. Body parts follow a polyline: current player -> h[0] -> h[1] -> ...

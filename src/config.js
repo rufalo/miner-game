@@ -122,6 +122,224 @@ export const RED = {
 };
 
 /**
+ * RECIPE / CRAFTING SYSTEM
+ *
+ * Body parts no longer "do stuff" on their own - they are INGREDIENTS that
+ * trail behind the player. When the tail fills (max 4) the ingredients are
+ * consumed in a COMBINE that grants the player a permanent upgrade.
+ *
+ * Each color contributes 3 essence values (its primary essence is the highest).
+ * Essence totals are multiplied by ingredient `value` so a value-8 blue is
+ * way more powerful than a value-2 blue.
+ *
+ * Combine resolution (in order):
+ *   1. Monochrome ultimate  - 3+ ingredients of the same color    -> ultimate
+ *   2. Special pair recipe  - two specific colors both present    -> special
+ *   3. Rainbow              - all 4 primary colors present        -> prism
+ *   4. Fallback             - highest summed essence              -> default
+ *
+ * Granting the same upgrade twice TIERS IT UP (T1 -> T2 -> T3 ...).
+ */
+export const RECIPE = {
+  slots: 4,                   // tail cap == recipe slot cap
+
+  // Held button to manually combine with fewer ingredients (still works fine
+  // with 1-3 ingredients - just produces a weaker fallback upgrade).
+  // 0 = disabled (auto-combine only when slots full).
+  manualCombineMinSlots: 1,
+
+  // Per-color essence contribution. Multiplied by ingredient.value at combine.
+  // Primary essence is the largest; secondary/tertiary lead to natural cross
+  // combos when colors are mixed.
+  essences: {
+    red:    { POWER: 3, HEAT: 2,    BLAST: 1 },
+    blue:   { AIM: 3,   CHARGE: 2,  POWER: 1 },
+    green:  { SWIFT: 3, VITAL: 2,   AIM: 1 },
+    yellow: { FORTIFY: 3, HARVEST: 2, VITAL: 1 },
+  },
+
+  // Special pair recipes. Triggers when BOTH listed colors have at least
+  // `minEach` ingredients present in the combine. Order matters - first match
+  // wins. Add new combos to the top.
+  pairRecipes: [
+    { colors: ['blue', 'yellow'],  minEach: 1, upgrade: 'shield',       label: 'BLUE+YELLOW: SHIELD' },
+    { colors: ['blue', 'red'],     minEach: 1, upgrade: 'missile',      label: 'BLUE+RED: MISSILES' },
+    { colors: ['red',  'green'],   minEach: 1, upgrade: 'dashStrike',   label: 'RED+GREEN: DASH STRIKE' },
+    { colors: ['green', 'yellow'], minEach: 1, upgrade: 'regenBarrier', label: 'GREEN+YELLOW: REGEN BARRIER' },
+    { colors: ['red',  'yellow'],  minEach: 1, upgrade: 'heavyTurret',  label: 'RED+YELLOW: HEAVY TURRET' },
+    { colors: ['blue', 'green'],   minEach: 1, upgrade: 'sniper',       label: 'BLUE+GREEN: SNIPER' },
+  ],
+
+  // 3+ of one color = that color's ultimate. Overrides pair recipes.
+  monoRecipes: {
+    blue:   { upgrade: 'laser',    label: '3x BLUE: LASER' },
+    red:    { upgrade: 'inferno',  label: '3x RED: INFERNO' },
+    green:  { upgrade: 'blink',    label: '3x GREEN: BLINK' },
+    yellow: { upgrade: 'barrier',  label: '3x YELLOW: BARRIER' },
+  },
+  monoThreshold: 3,
+
+  // All 4 primary colors present in the combine.
+  rainbow: { upgrade: 'prism', label: 'RAINBOW: PRISM' },
+
+  // Fallback: highest summed essence -> upgrade. Order also defines tie-break.
+  fallbackByEssence: {
+    POWER:   'turret',
+    AIM:     'sniper',
+    HEAT:    'burn',
+    CHARGE:  'overcharge',
+    BLAST:   'grenade',
+    SWIFT:   'speed',
+    VITAL:   'regen',
+    FORTIFY: 'armor',
+    HARVEST: 'harvest',
+  },
+};
+
+/**
+ * Upgrade catalog. Each entry describes one persistent player upgrade.
+ *
+ * Fields:
+ *   label        : HUD display name
+ *   color        : tint for the upgrade pill in the HUD
+ *   weapon       : true if this upgrade installs an armament that fires from
+ *                  the player each tick. If true, `fire` is called inside
+ *                  Player.tickArmaments at each cooldown.
+ *   maxTier      : tier cap. Each combine that resolves to this upgrade tiers
+ *                  it up; tier > maxTier just refunds a small bonus elsewhere
+ *                  (handled in RecipeSystem).
+ *
+ * Tier-specific tunings live inside each `apply()` / `fire()` body so adding
+ * a new upgrade only touches this file + UPGRADES.
+ */
+export const UPGRADES = {
+  // --- Weapon modules (fire from player) ---
+  turret: {
+    label: 'Turret',   color: 0x4aa9ff, weapon: true,
+    fireRate: [1.4, 1.9, 2.5, 3.2],
+    damage:   [10,  15,  21,  30],
+    range:    260,
+  },
+  sniper: {
+    label: 'Sniper',   color: 0x9af7ff, weapon: true,
+    fireRate: [0.55, 0.8, 1.1, 1.5],
+    damage:   [40,   60,  85,  120],
+    range:    520,
+    critMult: 2,
+  },
+  laser: {
+    label: 'Laser',    color: 0x6ddfff, weapon: true,
+    // Laser fires a fast hitscan-style beam (high fire rate, piercing bullet).
+    fireRate: [3.0, 4.0, 5.0, 6.0],
+    damage:   [8,   12,  17,  24],
+    range:    640,
+    pierce:   3,
+  },
+  missile: {
+    label: 'Missiles', color: 0xff7a3a, weapon: true,
+    fireRate: [0.85, 1.1, 1.4, 1.8],
+    damage:   [28,   40,  56,  78],
+    range:    420,
+    count:    [1, 1, 2, 2],
+  },
+  heavyTurret: {
+    label: 'Heavy Turret', color: 0xffa64a, weapon: true,
+    fireRate: [0.9, 1.2, 1.5, 1.9],
+    damage:   [22, 32, 46, 64],
+    range:    320,
+    pierce:   1,
+  },
+  inferno: {
+    label: 'Inferno',  color: 0xff5a5a, weapon: true,
+    fireRate: [1.6, 2.2, 2.8, 3.5],
+    damage:   [16,  22,  30,  40],
+    range:    280,
+    burnDps:  [12, 18, 26, 36],
+    burnMs:   2400,
+  },
+  grenade: {
+    label: 'Grenade',  color: 0xff8a44, weapon: true,
+    fireRate: [0.7, 0.95, 1.25, 1.6],
+    damage:   [24, 34, 48, 66],
+    range:    340,
+    aoeRadius: 90,
+  },
+  prism: {
+    label: 'Prism',    color: 0xffffff, weapon: true,
+    // Prism fires 3 bullets in different colors; high fire rate.
+    fireRate: [2.2, 3.0, 3.8, 4.6],
+    damage:   [12, 18, 25, 34],
+    range:    340,
+  },
+  burn: {
+    label: 'Burn',     color: 0xff6a3a, weapon: false,
+    // Damages enemies within radius continuously.
+    auraRadius: [120, 160, 200, 240],
+    auraDps:    [10,  16,  24,  34],
+  },
+  // --- Passive / defensive ---
+  shield: {
+    label: 'Shield',   color: 0xb0e7ff, weapon: false,
+    // Absorb HP layer that regenerates over time.
+    maxShield:   [25, 45, 70, 100],
+    regenPerSec: [3,  5,  8,  12],
+    regenDelayMs: 3500,
+  },
+  barrier: {
+    label: 'Barrier',  color: 0xffe27a, weapon: false,
+    // Bigger, slower-regen shield.
+    maxShield:   [60, 100, 150, 220],
+    regenPerSec: [4,  6,   9,   13],
+    regenDelayMs: 5000,
+  },
+  regenBarrier: {
+    label: 'Regen Barrier', color: 0xa8e88a, weapon: false,
+    // Smaller shield + HP regen. Hybrid green+yellow.
+    maxShield:   [20, 35, 55, 80],
+    regenPerSec: [4,  6,  9,  13],
+    regenDelayMs: 2800,
+    hpRegenPerSec: [1, 2, 3, 5],
+  },
+  armor: {
+    label: 'Armor',    color: 0xc0b070, weapon: false,
+    // % incoming damage reduction.
+    damageReduction: [0.10, 0.18, 0.28, 0.40],
+  },
+  regen: {
+    label: 'Regen',    color: 0x8aef7a, weapon: false,
+    hpRegenPerSec: [2, 4, 6, 9],
+  },
+  // --- Stat-only ---
+  speed: {
+    label: 'Speed',    color: 0x52d97a, weapon: false,
+    speedMult: [1.10, 1.20, 1.32, 1.48],
+  },
+  blink: {
+    label: 'Blink',    color: 0x6effa0, weapon: false,
+    // Reduces dash cooldown and increases iframe duration on dash.
+    dashCdMult:  [0.85, 0.72, 0.60, 0.48],
+    dashIframeBonusMs: [60, 120, 180, 260],
+  },
+  harvest: {
+    label: 'Harvest',  color: 0xffd64a, weapon: false,
+    mineRateMult: [1.20, 1.40, 1.65, 2.00],
+    gaugeFillBonus: [0.10, 0.20, 0.32, 0.50],
+  },
+  overcharge: {
+    label: 'Overcharge', color: 0xffe27a, weapon: false,
+    // Improves the E ability rather than firing on its own.
+    durationBonusMs: [600, 1400, 2400, 3600],
+    cdMult:          [0.92, 0.82, 0.70, 0.58],
+  },
+  dashStrike: {
+    label: 'Dash Strike', color: 0xff9aa0, weapon: false,
+    // Shockwave fires automatically at the start of every dash.
+    radius: [110, 150, 190, 230],
+    damage: [16, 24, 34, 48],
+  },
+};
+
+/**
  * Automatic world hazards / authored landmarks. Each tier ring seeds a few
  * boulder pits that telegraph + lob arcing AoE rocks at the player.
  *

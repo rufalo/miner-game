@@ -180,6 +180,50 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
 - **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
 - **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.
 
+## 20. Implemented: Recipe / cauldron tail (major redesign)
+
+Body parts are no longer permanent weapon platforms - they are **ingredients** in a **recipe**. The snake tail is now a cauldron: 4 ingredients auto-combine into a **player upgrade**, then the tail empties.
+
+### Player ask
+
+> instead of the body part doing the stuff i want them to be like ingredients part of a recipe and when i collect 3 or 4 of them then they combine and trigger an upgrade depending on the pieces... each type gives maybe 3 types of values with different amounts ... blue and yellow parts give shield, blue and red give missiles, if blue value is really high then laser
+
+### Design
+
+- **Tail = ingredient slot list** (max == `RECIPE.slots`, default 4). Visually unchanged - still the same snake trail with color-tinted segments.
+- **Each color has 3 essence contributions** (see README table). Primary essence is the highest; secondary/tertiary lead to natural cross-color combos. Essences are scaled by ingredient `value`.
+- **Combine resolves in priority** (in [`RecipeSystem.resolve`](src/systems/RecipeSystem.js)):
+  1. mono (3+ same color) -> color's ultimate (laser / inferno / blink / barrier)
+  2. rainbow (all 4 primaries) -> prism
+  3. pair recipes (configured list) -> special (shield / missiles / dash strike / regen barrier / heavy turret / sniper)
+  4. fallback: highest summed essence -> mapped upgrade (turret / sniper / burn / speed / regen / armor / harvest / grenade / overcharge)
+- **Same upgrade twice tiers it up** (I -> II -> III -> IV). Each tier's stats live in flat arrays in [`UPGRADES`](src/config.js) so adding a new tier is one array entry.
+
+### What got retired
+
+- **BodyPart.update** is short-circuited before the weapon dispatch path. Trail follow, prism cycling, mark glow all stay; weapon firing, on-hit AoE, burn payload, overcharge buff all stop.
+- **Player.recomputeMarkAggregate** / **recomputeSetBonuses** zero out and return - mark passive ticks (regen, aura, lifesteal, dash echo) are gone from the per-part path. Equivalent effects are available as **recipe upgrades** instead, which is more legible.
+- **Player.recomputeStats** no longer reads green/yellow parts for speed / cargo discount; those moved to the recipe Speed and Harvest upgrades.
+- **Hybrid evolutions** (`spawnHybridEvolution`) and the **STACK / RAINBOW / BRANCH combo system** (`checkCombos`) are no-ops. The recipe pair / mono / rainbow rules replace them with a single, predictable resolver.
+
+### What got added
+
+- [`src/config.js`](src/config.js): `RECIPE` block (essences, pair / mono / rainbow tables, fallback map) and a flat `UPGRADES` catalog with per-tier stat arrays.
+- [`src/systems/RecipeSystem.js`](src/systems/RecipeSystem.js): pure resolver - takes an ingredient list, returns an upgrade key + label + ruleType.
+- [`src/systems/RecipeUpgrades.js`](src/systems/RecipeUpgrades.js): `installOrUpgrade`, `recomputePassives` (folds every armament into `player.recipeBoosts` plus shield bookkeeping), `tickArmaments` (per-frame fire), `tickPassives` (shield + HP regen), `absorbDamage` (shield layer for `takeDamage`).
+- `Player`: `armaments` list + `recipeBoosts` + `maxShield` / `shield` state. Dash threads recipe `dashCdMult` / `dashIframeBonusMs` / `dashStrike`. Overcharge threads recipe duration + cd bonuses. `takeDamage` runs damage through `damageReduction` then `absorbDamage` then HP.
+- `GameScene.triggerEvolution` is now the single growth entry point: appends one ingredient per gauge fill and auto-fires `combineRecipe` whenever the tail reaches `RECIPE.slots`. Old `spawnEvolution` / `spawnHybridEvolution` / `checkCombos` are stub no-ops kept around so we can revive per-part weapons later if we ever want a hybrid mechanic.
+- `combineRecipe`: snapshots ingredients, resolves via `RecipeSystem`, tweens every part into the player center and explodes them, then `installOrUpgrade`s the result and pops a banner with the tier name.
+- UI: a `recipe` line replaces the parts summary. Shows current R / G / B / Y ingredient counts, slot fill (`slots N/4`), live recipe preview (`next  SHIELD`) so the player can steer mining choices, and a `gear` list of installed upgrades + tiers. New shield bar under the HP bar only appears while the player has a max shield.
+
+### Next-step wishlist
+
+- **Manual combine button** (e.g. C key) to fire with fewer than 4 ingredients for emergency situational upgrades. Config slot `RECIPE.manualCombineMinSlots` is already reserved.
+- **Upgrade slot cap** - currently you can stack any number of upgrades; eventually choose 4-6 max with the ability to *replace* an existing one on combine.
+- **Recipe book / pity timer** - first time you trigger each recipe shows a one-time "RECIPE DISCOVERED" banner with the ingredient pattern.
+- **Visual ingredient orbs** floating around the player as an alternative to the tail visualization (we already have the data, just need new visuals).
+- **More recipes** - 5+ specific pair combos, rare "high-value-of-X" thresholds (e.g. one Blue ingredient of value 12+ alone -> Laser even without 3 blues).
+
 ## 19. Implemented: World features (landmarks + neutral miners)
 
 First slice of "the world does things on its own". Two complementary systems, both seeded once by the Spawner and then self-sustaining.

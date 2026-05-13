@@ -2,8 +2,10 @@ import Phaser from 'phaser';
 import {
   COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
   EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO, DRAFT, BOSS, BIOME,
-  SHOCKWAVE, LANDMARK,
+  SHOCKWAVE, LANDMARK, RECIPE, UPGRADES,
 } from '../config.js';
+import { RecipeSystem } from '../systems/RecipeSystem.js';
+import { installOrUpgrade } from '../systems/RecipeUpgrades.js';
 import { Player } from '../entities/Player.js';
 import { BodyPart } from '../entities/BodyPart.js';
 import { MineralDeposit } from '../entities/MineralDeposit.js';
@@ -222,10 +224,10 @@ const DRAFT_CARDS = [
     apply: (p, s) => {
       const colors = ['red', 'green', 'blue', 'yellow'];
       const color = Phaser.Utils.Array.GetRandom(colors);
-      // Reuse spawnEvolution: it appends a new segment OR upgrades, follows
-      // the tail cap, fires combos, and even nudges the global ramp. Safe to
-      // call mid-apply because noteEvolutionForDraft is gated on pendingDraft.
-      s.spawnEvolution(color);
+      // Reuse triggerEvolution: appends a single ingredient onto the tail
+      // and auto-combines if the slot cap is reached. Safe to call mid-apply
+      // because noteEvolutionForDraft is gated on pendingDraft.
+      s.triggerEvolution(color);
     },
   },
   {
@@ -589,70 +591,106 @@ export class GameScene extends Phaser.Scene {
 
   // --- Evolution ---
 
+  /**
+   * RECIPE REDESIGN ENTRY POINT.
+   *
+   * Each filled gauge now spawns a single INGREDIENT (a body part with color
+   * + value) onto the tail. Once the tail reaches RECIPE.slots, the recipe
+   * automatically combines: every part is consumed, an upgrade is granted,
+   * and the tail is empty for the next batch.
+   *
+   * Hybrid / combo / mark-upgrade paths from the previous design are
+   * intentionally retired (the recipe pair / mono / rainbow rules handle
+   * the same "specific combo unlocks something better" promise).
+   */
   triggerEvolution(color) {
-    const player = this.player;
-    // Look for a partner gauge sitting at or above hybrid threshold.
-    let partner = null;
-    for (const k of COLOR_KEYS) {
-      if (k === color) continue;
-      const c = player.cargo[k];
-      if (c.cap > 0 && c.current / c.cap >= EVOLUTION.hybridGaugeMin) {
-        partner = k;
-        break;
-      }
-    }
-
-    if (partner && this.hybridFor(color, partner)) {
-      this.spawnHybridEvolution(color, partner);
-    } else {
-      this.spawnEvolution(color);
-    }
-  }
-
-  /** Returns the HYBRIDS entry for the (a,b) pair, or null. */
-  hybridFor(a, b) {
-    const key = [a, b].sort().join('+');
-    return HYBRIDS[key] || null;
-  }
-
-  spawnEvolution(color) {
     const player = this.player;
     player.evolutions[color] = (player.evolutions[color] || 0) + 1;
 
-    const trail = player.trailParts();
-    const sameColorTrail = trail.filter(p => p.color === color);
-    const appendMode =
-      sameColorTrail.length < EVOLUTION.upgradeAtPartCount &&
-      trail.length < player.maxTail();
-
-    if (appendMode) {
-      const value = EVOLUTION.baseValue + (player.evolutions[color] - 1) * EVOLUTION.valuePerEvolution;
-      const part = new BodyPart(this, player, trail.length, { color, value });
-      player.parts.push(part);
-      this.bodyParts.add(part);
-      this.spawnGrowthFx(player.x, player.y, COLORS[color], 'NEW ' + color.toUpperCase());
-    } else {
-      // Upgrade: weakest same-color trail part, or any trail part if none match.
-      let candidates = sameColorTrail;
-      if (!candidates.length) candidates = trail.slice();
-      candidates.sort((a, b) => a.value - b.value);
-      const target = candidates[0];
-      if (target) {
-        target.upgradeValue(EVOLUTION.upgradeValueIncrement);
-        this.spawnGrowthFx(target.x, target.y, COLORS[color], 'UPGRADE');
-      } else {
-        this.spawnGrowthFx(player.x, player.y, COLORS[color], 'GROWTH');
-      }
+    // Tail full? Combine first, THEN add the new ingredient as #1 of the
+    // next recipe so no gauge fills are wasted.
+    if (player.parts.length >= RECIPE.slots) {
+      this.combineRecipe();
     }
 
+    const value = EVOLUTION.baseValue
+      + (player.evolutions[color] - 1) * EVOLUTION.valuePerEvolution;
+    const part = new BodyPart(this, player, player.parts.length, { color, value });
+    player.parts.push(part);
+    this.bodyParts.add(part);
+    this.spawnGrowthFx(player.x, player.y, COLORS[color],
+      `${color.toUpperCase()} +${value}`);
     player.chainChanged();
-    this.checkCombos();
     this.noteEvolutionForDraft(1);
+
+    // Newly appended ingredient brings us to the slot cap: combine now so
+    // the player sees an immediate payoff.
+    if (player.parts.length >= RECIPE.slots) {
+      this.combineRecipe();
+    }
   }
 
-  spawnHybridEvolution(colorA, colorB) {
+  /**
+   * Consume every body part on the tail, resolve the recipe, install the
+   * upgrade, and play the combine FX. Idempotent for empty tails.
+   */
+  combineRecipe() {
     const player = this.player;
-    const hybrid = this.hybridFor(colorA, colorB);
+    if (!player?.parts?.length) return;
+
+    const ingredients = player.parts.map(p => ({ color: p.color, value: p.value }));
+    const result = RecipeSystem.resolve(ingredients);
+
+    // Snapshot positions for the "fly into player" animation, then detach
+    // the parts from the player's logical chain right away so subsequent
+    // gauge fills know the tail is empty.
+    const dyingParts = player.parts.slice();
+    player.parts.length = 0;
+    player.chainChanged?.();
+
+    // Each ingredient streaks into the player center, then explodes.
+    for (const p of dyingParts) {
+      if (!p?.active) continue;
+      this.tweens.add({
+        targets: p,
+        x: player.x, y: player.y,
+        scaleX: 0, scaleY: 0,
+        alpha: 0,
+        duration: 320,
+        ease: 'Quad.easeIn',
+        onComplete: () => p.destroyPart?.(),
+      });
+    }
+    this.cameras.main.flash(200, 220, 220, 255);
+    this.cameras.main.shake(160, 0.005);
+
+    // Install (or tier up) the chosen upgrade.
+    const installResult = installOrUpgrade(player, result.upgrade);
+    const tier = installResult?.tier ?? 1;
+    const wasNew = installResult?.wasNew ?? true;
+
+    // Banner: show what got installed and at what tier.
+    const def = UPGRADES[result.upgrade] || {};
+    const labelTier = ['I', 'II', 'III', 'IV', 'V'][Math.min(4, tier - 1)] || `T${tier}`;
+    const text = wasNew
+      ? `${def.label || result.upgrade.toUpperCase()} ${labelTier}`
+      : `${def.label || result.upgrade.toUpperCase()} -> ${labelTier}`;
+    this.spawnGrowthFx?.(player.x, player.y, def.color || 0xffffff, text);
+  }
+
+  /**
+   * RETIRED in the recipe redesign. Each gauge fill now appends exactly one
+   * ingredient to the tail; combo behavior is handled inside combineRecipe()
+   * via RECIPE.pairRecipes / .monoRecipes. Kept as a stub so any stale
+   * references don't crash.
+   */
+  spawnHybridEvolution(colorA, _colorB) {
+    this.triggerEvolution?.(colorA);
+    return;
+    /* eslint-disable */
+    // Old hybrid path retained below for reference only.
+    const player = this.player;
+    const hybrid = this.hybridFor(colorA, _colorB);
     if (!hybrid) {
       this.spawnEvolution(colorA);
       return;
@@ -712,7 +750,13 @@ export class GameScene extends Phaser.Scene {
    *             orbital (one-shot, doesn't consume parts).
    *   BRANCH  - chain length >= COMBO.branchAtParts unlocks split-tail mode.
    */
+  /**
+   * RETIRED in the recipe redesign. Combo / set effects now resolve at
+   * combine time via RECIPE rules. Stubbed to no-op.
+   */
   checkCombos() {
+    return;
+    /* eslint-disable */
     const player = this.player;
     if (!player) return;
 

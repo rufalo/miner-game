@@ -57,62 +57,51 @@ Draft cards (regular and elite) can extend, strengthen, and shorten the cooldown
 - **Green** — adds a **speed boost** segment.
 - **Yellow** — reduces all evolution thresholds (faster growth across the board).
 
-## Evolution system
+## Recipe system (cauldron tail)
 
-Cargo bars are **evolution gauges**. Walk next to a mineral deposit to auto-mine it; that color's gauge fills as you collect. When a gauge tops up, it pops:
+The snake tail is now a **cauldron**: each segment is an **ingredient**, not a weapon platform. When the tail reaches **4 ingredients** it auto-combines into a **player upgrade**, the segments fly into the player, and the tail is empty for the next recipe.
 
-- **Under 3 parts of that color attached** → a new segment of that color is appended to your snake.
-- **3 or more attached** → the system upgrades your weakest matching part instead (bigger, more HP, stronger weapon).
-- **Tail cap** — you can only have **`PLAYER.maxTailSegments` trail segments** (default 4). Orbitals from combos do not count. When the tail is full, new evolutions **upgrade** an existing trail part instead of lengthening the snake. Raise the cap later via meta / upgrades (constant lives in `src/config.js`).
-- **If another gauge is at 80%+** when one pops, both drain and a **hybrid part** is spawned:
-  - **PLASMA** (blue + red) — slow, very heavy single shot at long range.
-  - **SWARM** (green + red) — rapid small homing missiles.
-  - **RAPID** (blue + green) — high-rate weak bullets.
+### How ingredients spawn
 
-Each evolution makes the next one for that color cost more, **and every evolution (append or upgrade, any color) globally bumps the threshold of every other gauge**, so the snake is meant to get harder to grow the bigger it gets. The colored squares scattered around are **boosters** that instantly fill ~60% of the matching gauge for free.
+Cargo bars are still **evolution gauges**. Mining a deposit fills the matching color's gauge. When a gauge tops up, **one ingredient of that color is appended to the tail**. Booster pickups (the colored squares around the world) still instantly fill ~60% of a gauge for free.
 
-## Mark tiers (qualitative upgrades)
+Each filled gauge globally ramps the cost of the *next* one, so later ingredients are slower to acquire — but they're also worth more `value`, which feeds into the essence math below.
 
-Every body part has a **Mark tier** (I → IV) derived from its accumulated `value`. Crossing a threshold unlocks a **new ability** instead of just bigger numbers, and the part grows a soft glow ring colored by its tier (white → gold → orange).
+### How combine resolves
 
-Thresholds: `value ≥ 8` = II, `≥ 18` = III, `≥ 32` = IV.
+Every ingredient contributes 3 essence values, with its **primary essence the highest** and the secondaries leading to natural cross-color combos. Totals are multiplied by ingredient `value` so a big late-game ingredient swings the recipe much harder than an early-game one.
 
-| Kind | Mark II | Mark III | Mark IV |
+| Color | Primary | Secondary | Tertiary |
 |---|---|---|---|
-| **turret** (blue) | +1 multishot | bullets pierce one extra enemy | 25 % crit chance (2× damage) |
-| **missile** (red) | +1 missile per volley | hits apply burn DoT (4 dps / 1.5 s) | +20 % fire rate |
-| **speed** (green) | +0.4 HP/s regen | damage aura (4 dps in 80 px) | dash leaves a Shockwave echo |
-| **cargo** (yellow) | +5 % gauge fill (stacks per part) | +1 HP per 5 raw units mined | 8 % chance to double mining ticks |
-| **plasma** (b+r) | +1 pierce | on-hit AoE splash (60 px) | +25 % damage |
-| **swarm** (g+r) | +1 missile per volley | hits apply burn | +25 % damage |
-| **rapid** (b+g) | +1 pierce | +25 % fire rate | +25 % crit chance |
-| **prism** (rainbow) | +20 % damage | +20 % fire rate | +1 pierce on every beam |
+| **Red** | POWER (3) | HEAT (2) | BLAST (1) |
+| **Blue** | AIM (3) | CHARGE (2) | POWER (1) |
+| **Green** | SWIFT (3) | VITAL (2) | AIM (1) |
+| **Yellow** | FORTIFY (3) | HARVEST (2) | VITAL (1) |
 
-A small **MARK II / III / IV** banner pops over the part the moment it promotes.
+When the cauldron fires it checks rules **in priority order**:
 
-## Set bonuses
+1. **Monochrome ultimate** — 3+ of the same color → that color's "ultimate":
+   - 3× Blue = **LASER** (piercing high-rate beam)
+   - 3× Red = **INFERNO** (fast burning bullets)
+   - 3× Green = **BLINK** (much shorter dash CD + longer i-frames)
+   - 3× Yellow = **BARRIER** (huge regenerating shield)
+2. **Rainbow** — at least one of every primary color → **PRISM** (multi-color fast bullets).
+3. **Special pair recipe** — both colors present:
+   - Blue + Yellow = **SHIELD**
+   - Blue + Red = **MISSILES**
+   - Red + Green = **DASH STRIKE** (shockwave on every dash)
+   - Green + Yellow = **REGEN BARRIER** (smaller shield + HP regen)
+   - Red + Yellow = **HEAVY TURRET** (big slow piercing bullets)
+   - Blue + Green = **SNIPER** (long-range high-damage single shot)
+4. **Fallback** — highest summed essence picks the upgrade: POWER → Turret, AIM → Sniper, HEAT → Burn aura, SWIFT → Speed, VITAL → Regen, FORTIFY → Armor, HARVEST → Harvest, BLAST → Grenade, CHARGE → Overcharge.
 
-The chain checks attached part **colors** every time it changes and activates set bonuses automatically. Active sets are shown on the HUD parts line in brackets (`MARKSMAN`, `POLYCHROME`, ...).
+The HUD shows a live **`next: <upgrade>`** preview while the tail is filling, so you can steer your mining toward the recipe you want.
 
-| Set | Activates when... | Effect |
-|---|---|---|
-| **Pyrotechnician** | ≥ 3 red parts | +15 % missile AoE radius |
-| **Marksman** | ≥ 3 blue parts | +15 % turret range |
-| **Greased** | ≥ 3 green parts | +0.5 HP/s passive regen |
-| **Logistics** | ≥ 3 yellow parts | +10 % to preferred-color mining multiplier |
-| **Polychrome** | ≥ 1 of each primary color | +5 % damage AND +5 % speed (every weapon) |
+### Tier-up
 
-Set bonuses stack with mark abilities — e.g. a Polychrome chain with 3 mark II missiles gets the missile mark II multishot, the missile set's AoE, the polychrome damage bonus, plus any draft cards.
+Getting the **same upgrade** from a later combine **tiers it up** (I → II → III → IV). Each tier roughly doubles fire rate / damage / radius for weapons, or stacks the passive value for stat upgrades.
 
-## Combos & alternative follow patterns
-
-The snake isn't just a single straight tail. Parts can auto-combine and adopt different follow patterns:
-
-- **STACK** — whenever two same-kind weapon parts end up adjacent (e.g. two missile reds, or two plasmas), they instantly **fuse into an orbital twin** that circles the player at a fixed radius, firing faster and harder than either source part.
-- **RAINBOW (PRISM)** — once your chain contains at least one of every primary color (R, G, B, Y), a **PRISM orbital** spawns. It orbits at a wider radius and fires a 4-color bullet spread.
-- **BRANCH (split-tail)** — once your trail has 6 parts attached, it visually splits: every new trail-mode part alternates to either side of the trail, so the snake grows into two parallel ribbons behind you.
-
-The HUD parts line shows combo state in brackets, e.g. `[orb:2 PRISM SPLIT]`.
+Your installed upgrades are listed on the HUD parts line, e.g. `gear  Turret II  Shield I  Speed III`.
 
 ## Draft picks
 

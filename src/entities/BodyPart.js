@@ -354,29 +354,12 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
       this.markGlow.setAlpha(baseAlpha + 0.10 * Math.sin(time * 0.006));
     }
 
-    if (time < this.nextFireAt) return;
-
-    const weapon = this.weaponInfo();
-    if (!weapon) return;
-    const target = this.scene.targeting?.findNearestEnemy(this.x, this.y, this.range);
-    if (!target) return;
-
-    const angle = Math.atan2(target.y - this.y, target.x - this.x);
-
-    // Overcharge window: temporarily bump damage and fire rate. We swap
-    // `damage` for the duration of the fire() call so the existing dispatchers
-    // pick it up without each one having to know about overcharge.
-    const overcharged = this.player && this.scene.time.now < (this.player.overchargeUntil || 0);
-    if (overcharged) {
-      const origDmg = this.damage;
-      this.damage = origDmg * OVERCHARGE.damageMult;
-      try { weapon.fire(this, target, angle); }
-      finally { this.damage = origDmg; }
-      this.nextFireAt = time + 1000 / (this.fireRate * OVERCHARGE.fireRateMult);
-    } else {
-      weapon.fire(this, target, angle);
-      this.nextFireAt = time + 1000 / this.fireRate;
-    }
+    // Body parts are RECIPE INGREDIENTS now. They no longer fire weapons or
+    // apply on-hit effects of their own - the recipe combine grants player
+    // armaments instead. Everything below this line is intentionally dead
+    // code; kept for now so we can revive the per-segment weapon path if we
+    // ever want a hybrid mechanic.
+    return;
   }
 
   /**

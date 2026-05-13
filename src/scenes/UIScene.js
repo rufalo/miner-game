@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION, DRAFT, SHOCKWAVE, OVERCHARGE } from '../config.js';
+import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION, DRAFT, SHOCKWAVE, OVERCHARGE, RECIPE, UPGRADES } from '../config.js';
+import { RecipeSystem } from '../systems/RecipeSystem.js';
 
 const formatTime = (ms) => {
   const s = Math.floor(ms / 1000);
@@ -53,6 +54,15 @@ export class UIScene extends Phaser.Scene {
     this.hpText = this.add.text(0, 0, '', {
       fontFamily: 'monospace', fontSize: '11px', color: '#e8ecf2',
     }).setOrigin(0.5, 0);
+
+    // Shield bar (below HP, only visible when the player has a max shield).
+    this.shieldBg = this.add.rectangle(0, 0, 240, 6, 0x111722)
+      .setOrigin(0.5, 0)
+      .setStrokeStyle(1, 0x2a3548)
+      .setVisible(false);
+    this.shieldFill = this.add.rectangle(0, 0, 238, 4, 0xb0e7ff)
+      .setOrigin(0.5, 0)
+      .setVisible(false);
 
     // Tier readout (bottom-left)
     this.tierText = this.add.text(HUD.margin, this.scale.height - HUD.margin - 18, '', {
@@ -187,6 +197,8 @@ export class UIScene extends Phaser.Scene {
     this.hpBg.setPosition(width / 2, HUD.margin + 18);
     this.hpFill.setPosition(width / 2, HUD.margin + 19);
     this.hpText.setPosition(width / 2, HUD.margin + 19);
+    this.shieldBg.setPosition(width / 2, HUD.margin + 32);
+    this.shieldFill.setPosition(width / 2, HUD.margin + 33);
 
     this.dashBg.setPosition(width / 2, HUD.margin + 36);
     this.dashFill.setPosition(width / 2, HUD.margin + 37);
@@ -264,6 +276,19 @@ export class UIScene extends Phaser.Scene {
     const hpFrac = Math.max(0, p.hp / p.maxHP);
     this.hpFill.setSize(238 * hpFrac, 10);
     this.hpText.setText(`HP ${Math.ceil(p.hp)} / ${p.maxHP}`);
+
+    // Shield bar: only visible if the player has a max shield. Tints from
+    // cyan (full) to dim teal (almost broken) for a quick read.
+    if (p.maxShield > 0) {
+      this.shieldBg.setVisible(true);
+      this.shieldFill.setVisible(true);
+      const sFrac = Math.max(0, Math.min(1, p.shield / p.maxShield));
+      this.shieldFill.setSize(238 * sFrac, 4);
+      this.shieldFill.setFillStyle(sFrac > 0.5 ? 0xb0e7ff : 0x6da6c2);
+    } else {
+      this.shieldBg.setVisible(false);
+      this.shieldFill.setVisible(false);
+    }
 
     // Draft progress bar.
     this.updateDraftProgress(gs);
@@ -399,41 +424,37 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    // Body part summary including hybrid kinds + combo state.
-    const counts = { red: 0, green: 0, blue: 0, yellow: 0, plasma: 0, swarm: 0, rapid: 0, prism: 0 };
-    let orbitalCount = 0;
-    let highestMark = 1;
-    let topMarkPart = null;
+    // Recipe slot status. parts are now ingredients in the cauldron tail.
+    const counts = { red: 0, green: 0, blue: 0, yellow: 0 };
+    let totalValue = 0;
     for (const part of p.parts) {
-      counts[part.color] = (counts[part.color] || 0) + 1;
-      if (part.followMode === 'orbit') orbitalCount++;
-      if ((part.mark || 1) > highestMark) {
-        highestMark = part.mark;
-        topMarkPart = part;
-      }
+      if (part.color in counts) counts[part.color]++;
+      totalValue += part.value || 0;
     }
-    const hybridLine = (counts.plasma + counts.swarm + counts.rapid) > 0
-      ? `   hyb  P:${counts.plasma} S:${counts.swarm} Ra:${counts.rapid}`
-      : '';
-    const comboBits = [];
-    if (orbitalCount > 0) comboBits.push(`orb:${orbitalCount}`);
-    if (counts.prism > 0) comboBits.push('PRISM');
-    if (p.branchMode) comboBits.push('SPLIT');
-    if (highestMark >= 2) {
-      const roman = ['', 'I', 'II', 'III', 'IV'][highestMark] || '?';
-      comboBits.push(`M${roman}`);
+    const slots = p.parts.length;
+    const cap = RECIPE.slots;
+
+    // Preview: what would the recipe resolve to RIGHT NOW if it auto-combined?
+    let previewLabel = '...';
+    if (slots > 0) {
+      const ingr = p.parts.map(x => ({ color: x.color, value: x.value }));
+      const res = RecipeSystem.resolve(ingr);
+      const u = UPGRADES[res.upgrade];
+      previewLabel = u?.label ? u.label.toUpperCase() : res.upgrade.toUpperCase();
     }
-    // Active set bonuses live behind a short prefix; show their keys so the
-    // player can read "polychrome" / "marksman" etc at a glance.
-    const setKeys = p.setBonuses?.active ?? [];
-    if (setKeys.length) {
-      for (const k of setKeys) comboBits.push(k.toUpperCase());
+
+    // Active upgrades list: 'TURRET II' 'SHIELD I' ...
+    const armBits = [];
+    for (const arm of (p.armaments || [])) {
+      const u = UPGRADES[arm.key];
+      const roman = ['I', 'II', 'III', 'IV', 'V'][Math.min(4, arm.tier - 1)] || `T${arm.tier}`;
+      armBits.push(`${(u?.label || arm.key)} ${roman}`);
     }
-    const comboLine = comboBits.length ? `   [${comboBits.join(' ')}]` : '';
-    const trailLen = p.trailParts().length;
-    const tailCap = PLAYER.maxTailSegments;
+    const armLine = armBits.length ? `   gear  ${armBits.join('  ')}` : '';
+
     this.partsText.setText(
-      `parts  R:${counts.red}  G:${counts.green}  B:${counts.blue}  Y:${counts.yellow}   tail ${trailLen}/${tailCap}${hybridLine}${comboLine}`
+      `recipe  R:${counts.red} G:${counts.green} B:${counts.blue} Y:${counts.yellow}   ` +
+      `slots ${slots}/${cap}   next  ${previewLabel}${armLine}`
     );
   }
 

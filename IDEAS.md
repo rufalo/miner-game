@@ -170,6 +170,26 @@ Replaces the old buy-from-pickups model. The cargo bars are now **evolution gaug
 - **Booster pickups**: the old buy-pickup squares are now rare boosters that instantly fill ~60% of the matching gauge on contact (no cost).
 - **Visual feedback**: at 80% gauge a soft halo appears around the player tinted by that color; on evolution a ring + label burst out; on upgrade the part briefly scales 1.6x; hybrid spawns flash the camera and show the recipe label.
 
+## 16. Implemented: Draft-pick (pick 3) system
+
+Roguelite-style upgrade picks integrated with the evolution loop.
+
+- **Trigger**: every `DRAFT.everyNEvolutions` (default 3) growth events (any color, append OR upgrade). Hybrid evolutions count for 2.
+- **Pause-modal UI** ([`UIScene.showDraft`](src/scenes/UIScene.js)): 3 horizontal cards with title + description. Click a card or press `1` / `2` / `3`. The game is fully paused (physics + player input) until the player picks.
+- **HUD progress bar** under the parts line shows progress to the next pick and total drafts taken so far.
+- **Card pool** ([`DRAFT_CARDS` in GameScene](src/scenes/GameScene.js)) with `eligible(player, scene)` filters so cards that don't apply (e.g. "Fuse Lowest 2 Tail" with <2 tail parts) never show up.
+- **Persistent player buffs** are stored on `player.boosts`:
+  - `redDamageMult` — multiplies damage of `missile`, `swarm`, `plasma`.
+  - `blueFireRateMult` — multiplies fire rate of `turret`, `rapid`, `plasma`, `prism`.
+  - `greenSpeedMult` — multiplies the contribution of green parts to player speed.
+  - `pulseDamageMult`, `pulseFireRateMult` — for the built-in pulse weapon.
+  - `dashCooldownMult` — `<1` makes the dash recharge faster.
+  - `extraYellowReduction` — stacks on top of the yellow-part threshold discount, capped by `EVOLUTION.yellowReductionCap`.
+  - `player.maxTailBonus` — adds to `PLAYER.maxTailSegments`. Used everywhere via `player.maxTail()`.
+- **Boost application**: `BodyPart.applyKindStats()` re-reads `player.boosts` every time it runs; `Player.refreshAllPartStats()` re-applies stats on all existing parts after a card is picked, so boosts retroactively cover everything you already own.
+- **Maintenance cards**: `Fuse Lowest 2 Tail` merges the two weakest tail parts into one (the larger keeps its kind, total value carries over) so a slot opens up; `Recycle Smallest Tail` deletes the smallest part outright. Both end with `player.chainChanged()` so branch / split-tail offsets re-flow.
+- **State**: `pendingDraft = { options: [...] }` on GameScene; cleared on `applyDraftChoice` or scene restart.
+
 ## 15. Implemented: Combo & alternative-follow system
 
 Body parts can now auto-combine and adopt different follow patterns than the basic trailing snake.

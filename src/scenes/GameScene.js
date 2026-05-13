@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import {
   COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
-  EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO,
+  EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO, DRAFT,
 } from '../config.js';
 import { Player } from '../entities/Player.js';
 import { BodyPart } from '../entities/BodyPart.js';
@@ -21,6 +21,129 @@ import { HunterSpawner } from '../systems/HunterSpawner.js';
 
 // localStorage key for best-run persistence.
 const BEST_RUN_KEY = 'miner-snake:best-run-v1';
+
+// --- Draft card definitions ---
+// Each card: { id, title, desc, rarity, eligible(player, scene), apply(player, scene) }
+// `eligible` returns true if the card should be available in the pool.
+// `apply` mutates player / scene; recomputeStats + refreshAllPartStats run after.
+const DRAFT_CARDS = [
+  {
+    id: 'tail-cap',
+    title: '+1 Max Tail',
+    desc: 'Raise your tail capacity by 1 segment.',
+    rarity: 'rare',
+    eligible: () => true,
+    apply: (p) => { p.maxTailBonus = (p.maxTailBonus || 0) + 1; },
+  },
+  {
+    id: 'red-damage',
+    title: '+20% Red Damage',
+    desc: 'Missiles, swarm and plasma hit 20% harder.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.redDamageMult *= 1.20; },
+  },
+  {
+    id: 'blue-firerate',
+    title: '+20% Blue Fire Rate',
+    desc: 'Turrets, rapid and prism shoot 20% faster.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.blueFireRateMult *= 1.20; },
+  },
+  {
+    id: 'green-speed',
+    title: '+25% Green Speed Bonus',
+    desc: 'Green parts contribute 25% more to your speed.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.greenSpeedMult *= 1.25; },
+  },
+  {
+    id: 'yellow-reduction',
+    title: '+5% Threshold Discount',
+    desc: 'All gauges fill 5% faster (yellow-style discount).',
+    eligible: () => true,
+    apply: (p) => { p.boosts.extraYellowReduction += 0.05; },
+  },
+  {
+    id: 'pulse-damage',
+    title: '+50% Pulse Damage',
+    desc: 'Your built-in pulse weapon hits much harder.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.pulseDamageMult *= 1.50; },
+  },
+  {
+    id: 'pulse-firerate',
+    title: '+25% Pulse Fire Rate',
+    desc: 'Your built-in pulse weapon fires faster.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.pulseFireRateMult *= 1.25; },
+  },
+  {
+    id: 'dash-cd',
+    title: '-20% Dash Cooldown',
+    desc: 'Dash recharges noticeably faster.',
+    eligible: () => true,
+    apply: (p) => { p.boosts.dashCooldownMult *= 0.80; },
+  },
+  {
+    id: 'max-hp',
+    title: '+20 Max HP',
+    desc: 'Raise your maximum HP and heal that amount.',
+    eligible: () => true,
+    apply: (p) => { p.maxHP += 20; p.hp = Math.min(p.maxHP, p.hp + 20); },
+  },
+  {
+    id: 'heal',
+    title: 'Full Heal',
+    desc: 'Restore your HP to maximum.',
+    eligible: (p) => p.hp < p.maxHP,
+    apply: (p) => { p.hp = p.maxHP; },
+  },
+  {
+    id: 'repair-parts',
+    title: 'Repair All Parts',
+    desc: 'Restore every body part to full HP.',
+    eligible: (p) => p.parts.some(x => x.hp < x.maxHP),
+    apply: (p) => { for (const part of p.parts) part.hp = part.maxHP; },
+  },
+  {
+    id: 'fuse-lowest',
+    title: 'Fuse Lowest 2 Tail',
+    desc: 'Combine your two weakest tail segments into one (frees a slot).',
+    rarity: 'utility',
+    eligible: (p) => p.trailParts().length >= 2,
+    apply: (p, s) => {
+      const trail = p.trailParts().slice().sort((a, b) => a.value - b.value);
+      const a = trail[0], b = trail[1];
+      if (!a || !b) return;
+      const keep = a.value >= b.value ? a : b;
+      const drop = keep === a ? b : a;
+      // Bigger of the two absorbs the other's value.
+      keep.upgradeValue(drop.value);
+      // Remove the dropped part cleanly.
+      const idx = p.parts.indexOf(drop);
+      if (idx >= 0) p.parts.splice(idx, 1);
+      drop.destroy();
+      p.chainChanged();
+      s.spawnGrowthFx(keep.x, keep.y, keep.tint, 'FUSED');
+    },
+  },
+  {
+    id: 'recycle-smallest',
+    title: 'Recycle Smallest Tail',
+    desc: 'Remove your smallest tail segment, freeing a slot.',
+    rarity: 'utility',
+    eligible: (p) => p.trailParts().length >= 1,
+    apply: (p) => {
+      const trail = p.trailParts().slice().sort((a, b) => a.value - b.value);
+      const drop = trail[0];
+      if (!drop) return;
+      const idx = p.parts.indexOf(drop);
+      if (idx >= 0) p.parts.splice(idx, 1);
+      drop.destroy();
+      p.chainChanged();
+    },
+  },
+];
 
 export class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
@@ -43,6 +166,11 @@ export class GameScene extends Phaser.Scene {
     // Must be reset here too: scene.restart() reuses this class instance, so
     // a stale deathPayload would make UIScene re-show the recap immediately.
     this.deathPayload = null;
+
+    // Draft-pick state.
+    this.evolutionsSinceLastDraft = 0;
+    this.totalEvolutions = 0;          // for display only
+    this.pendingDraft = null;          // { options: [...] } while menu is open
 
     this.drawBackground();
 
@@ -284,7 +412,7 @@ export class GameScene extends Phaser.Scene {
     const sameColorTrail = trail.filter(p => p.color === color);
     const appendMode =
       sameColorTrail.length < EVOLUTION.upgradeAtPartCount &&
-      trail.length < PLAYER.maxTailSegments;
+      trail.length < player.maxTail();
 
     if (appendMode) {
       const value = EVOLUTION.baseValue + (player.evolutions[color] - 1) * EVOLUTION.valuePerEvolution;
@@ -308,6 +436,7 @@ export class GameScene extends Phaser.Scene {
 
     player.chainChanged();
     this.checkCombos();
+    this.noteEvolutionForDraft(1);
   }
 
   spawnHybridEvolution(colorA, colorB) {
@@ -323,7 +452,7 @@ export class GameScene extends Phaser.Scene {
     player.evolutions[colorB] = (player.evolutions[colorB] || 0) + 1;
 
     const trail = player.trailParts();
-    if (trail.length >= PLAYER.maxTailSegments) {
+    if (trail.length >= player.maxTail()) {
       // Tail full: still consume both gauges / evolutions, but upgrade instead of appending.
       const HYBRID_KINDS = new Set(['plasma', 'swarm', 'rapid']);
       const hybrids = trail.filter(p => HYBRID_KINDS.has(p.kind));
@@ -339,6 +468,8 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.flash(160, 255, 255, 255, false);
       player.chainChanged();
       this.checkCombos();
+      // Hybrid evolutions consume two gauges -> worth 2 toward the next draft.
+      this.noteEvolutionForDraft(2);
       return;
     }
 
@@ -356,6 +487,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.flash(160, 255, 255, 255, false);
     player.chainChanged();
     this.checkCombos();
+    this.noteEvolutionForDraft(2);
   }
 
   // --- Combo system ---
@@ -476,6 +608,52 @@ export class GameScene extends Phaser.Scene {
     this.spawnGrowthFx(player.x, player.y, 0xffffff, 'RAINBOW PRISM !');
     this.cameras.main.flash(280, 255, 255, 255, false);
     this.cameras.main.shake(160, 0.006);
+  }
+
+  // --- Draft pick system ---
+
+  /**
+   * Called after every evolution / hybrid evolution. Bumps a counter and,
+   * once it crosses the threshold, queues a draft pick (handled by UIScene
+   * which calls `applyDraftChoice`).
+   */
+  noteEvolutionForDraft(weight = 1) {
+    this.totalEvolutions += weight;
+    this.evolutionsSinceLastDraft += weight;
+    if (this.pendingDraft) return; // don't queue while one is already open
+    if (this.evolutionsSinceLastDraft >= DRAFT.everyNEvolutions) {
+      this.openDraft();
+    }
+  }
+
+  /**
+   * Builds a random pool of eligible draft cards and pauses the game.
+   * UIScene watches `this.pendingDraft` to show the menu.
+   */
+  openDraft() {
+    const player = this.player;
+    if (!player) return;
+    const pool = DRAFT_CARDS.filter(c => c.eligible(player, this));
+    if (pool.length === 0) return;
+    // Sample without replacement, up to optionCount cards.
+    Phaser.Utils.Array.Shuffle(pool);
+    const options = pool.slice(0, Math.min(DRAFT.optionCount, pool.length));
+    this.pendingDraft = { options };
+    this.setPaused(true);
+  }
+
+  /** Apply a chosen card and resume play. */
+  applyDraftChoice(card) {
+    if (!card || !this.pendingDraft) return;
+    card.apply(this.player, this);
+    this.player.recomputeStats();
+    this.player.refreshAllPartStats();
+    this.player.draftsTaken++;
+    this.evolutionsSinceLastDraft -= DRAFT.everyNEvolutions;
+    if (this.evolutionsSinceLastDraft < 0) this.evolutionsSinceLastDraft = 0;
+    this.pendingDraft = null;
+    this.setPaused(false);
+    this.spawnGrowthFx(this.player.x, this.player.y, 0xffe2a8, card.title);
   }
 
   /** A big ring + floating label centered on (x,y). `tint` is hex int. */

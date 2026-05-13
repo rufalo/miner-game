@@ -126,6 +126,17 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
       this.fireRate *= COMBO.stackFireRateMult;
       this.damage   *= COMBO.stackDamageMult;
     }
+
+    // Draft-card persistent boosts. Apply by color so "red damage" hits
+    // missiles + swarm (red-derived), "blue fire rate" hits turret + rapid +
+    // plasma + prism (blue-derived).
+    const b = this.player?.boosts;
+    if (b && this.damage != null) {
+      const RED_KINDS  = new Set(['missile', 'swarm', 'plasma']);
+      const BLUE_KINDS = new Set(['turret', 'rapid', 'plasma', 'prism']);
+      if (RED_KINDS.has(this.kind))  this.damage   *= b.redDamageMult || 1;
+      if (BLUE_KINDS.has(this.kind)) this.fireRate *= b.blueFireRateMult || 1;
+    }
   }
 
   /**

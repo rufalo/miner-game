@@ -340,6 +340,15 @@ export const COMBO = {
   prismValue: 8,
 };
 
+/**
+ * Draft-pick system: every `everyNEvolutions` growth events, the game pauses
+ * and offers the player `optionCount` random upgrade / maintenance cards.
+ */
+export const DRAFT = {
+  everyNEvolutions: 3,
+  optionCount: 3,
+};
+
 export const HUD = {
   barWidth: 160,
   barHeight: 14,

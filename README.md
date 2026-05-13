@@ -70,6 +70,21 @@ The snake isn't just a single straight tail. Parts can auto-combine and adopt di
 
 The HUD parts line shows combo state in brackets, e.g. `[orb:2 PRISM SPLIT]`.
 
+## Draft picks
+
+Every few evolutions (3 by default, tune with `DRAFT.everyNEvolutions`) the game pauses and offers **three random cards**:
+
+- Click one or press **1 / 2 / 3** to pick.
+- A small **draft progress bar** under the parts line on the HUD fills as you evolve.
+
+Card categories include:
+
+- **Passive boosts** — `+20% red damage`, `+20% blue fire rate`, `+25% green speed bonus`, `+5% threshold discount`, `+50% pulse damage`, `+25% pulse fire rate`, `-20% dash cooldown`, `+20 max HP`.
+- **Maintenance** — `Full Heal`, `Repair All Parts`, **`Fuse Lowest 2 Tail`** (combine your two weakest tail segments to free a slot), **`Recycle Smallest Tail`** (remove your weakest tail segment to free a slot).
+- **Capacity** — `+1 Max Tail` raises `PLAYER.maxTailSegments` by 1 for this run.
+
+Cards that don't apply (e.g. "Fuse Lowest 2 Tail" when you have <2 tail segments) are filtered out of the pool.
+
 ## Threats
 
 Two kinds of pressure:

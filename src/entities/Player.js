@@ -39,6 +39,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.branchMode = false;           // split-tail unlocked
     this.rainbowSpawned = false;       // PRISM orbital spawned
 
+    // --- Draft-granted persistent buffs ---
+    // Bonus added to PLAYER.maxTailSegments by "+1 Max Tail" cards.
+    this.maxTailBonus = 0;
+    // Multiplicative boosts read inside BodyPart.applyKindStats / recomputeStats.
+    this.boosts = {
+      redDamageMult: 1,
+      blueFireRateMult: 1,
+      greenSpeedMult: 1,            // multiplies green's contribution to player speed
+      pulseDamageMult: 1,
+      pulseFireRateMult: 1,
+      dashCooldownMult: 1,          // <1 = faster dash recharge
+      extraYellowReduction: 0,      // adds on top of yellow part reduction
+    };
+    // Cards consumed while alive; persists across deaths only if we save it
+    // (currently per-run only).
+    this.draftsTaken = 0;
+
     // Damage feedback / iframes
     this.iframeUntil = 0;
 
@@ -93,6 +110,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.parts.filter(p => p.followMode !== 'orbit');
   }
 
+  /** Current trail cap (base + draft bonus). Centralized so cards can grow it. */
+  maxTail() {
+    return PLAYER.maxTailSegments + (this.maxTailBonus || 0);
+  }
+
+  /** Re-applies stats on every body part (e.g. after a boost is granted). */
+  refreshAllPartStats() {
+    for (const p of this.parts) p.applyKindStats?.();
+  }
+
   /**
    * Re-assigns trail chain indices (skipping orbital parts) and refreshes
    * branched lateral offsets when split-tail mode is active. Call this any
@@ -127,11 +154,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // Hybrid bonus contributions:
       else if (p.kind === 'rapid') greenBonus += p.value * GREEN.speedBonusPerValue * 0.3;
     }
-    this.speedMultiplier = 1 + greenBonus;
+    const greenMult = this.boosts?.greenSpeedMult ?? 1;
+    this.speedMultiplier = 1 + greenBonus * greenMult;
 
+    const extraYellow = this.boosts?.extraYellowReduction ?? 0;
     const reduction = Math.min(
       EVOLUTION.yellowReductionCap,
-      yellowCount * EVOLUTION.yellowThresholdReduction
+      yellowCount * EVOLUTION.yellowThresholdReduction + extraYellow
     );
 
     // Threshold per color = baseThreshold
@@ -242,7 +271,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (spaceJustPressed && time >= this.dashReadyAt) {
       const dd = dir.lengthSq() > 0 ? dir : this.lastDir;
       this.dashUntil = time + PLAYER.dashDurationMs;
-      this.dashReadyAt = time + PLAYER.dashCooldownMs;
+      this.dashReadyAt = time + PLAYER.dashCooldownMs * (this.boosts?.dashCooldownMult ?? 1);
       this.iframeUntil = Math.max(this.iframeUntil, time + PLAYER.dashIframeMs);
       this.body.setVelocity(dd.x * PLAYER.dashSpeed, dd.y * PLAYER.dashSpeed);
       this.scene.spawnDashFx?.(this.x, this.y);
@@ -263,8 +292,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const target = this.scene.targeting?.findNearestEnemy(this.x, this.y, PLAYER.basePulseRange);
       if (target) {
         const angle = Math.atan2(target.y - this.y, target.x - this.x);
-        this.scene.spawnBullet(this.x, this.y, angle, PLAYER.basePulseDamage, true);
-        this.nextBasePulseAt = time + 1000 / PLAYER.basePulseFireRate;
+        const dmg  = PLAYER.basePulseDamage * (this.boosts?.pulseDamageMult ?? 1);
+        const rate = PLAYER.basePulseFireRate * (this.boosts?.pulseFireRateMult ?? 1);
+        this.scene.spawnBullet(this.x, this.y, angle, dmg, true);
+        this.nextBasePulseAt = time + 1000 / rate;
       }
     }
 

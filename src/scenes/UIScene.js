@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION } from '../config.js';
+import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION, DRAFT } from '../config.js';
 
 const formatTime = (ms) => {
   const s = Math.floor(ms / 1000);
@@ -76,9 +76,16 @@ export class UIScene extends Phaser.Scene {
 
     // --- Tip line ---
     this.tipText = this.add.text(this.scale.width / 2, HUD.margin,
-      'WASD/arrows/mouse  -  Space: dash  -  1-4: prefer color  -  Esc: pause  -  combos: stack / rainbow / split-tail', {
+      'WASD/arrows/mouse  -  Space: dash  -  1-4: prefer color  -  Esc: pause  -  draft picks every few evolutions', {
         fontFamily: 'monospace', fontSize: '11px', color: '#8693ad',
       }).setOrigin(0.5, 0);
+
+    // --- Draft progress bar (just under the parts text) ---
+    this.draftBg = this.add.rectangle(HUD.margin, 0, HUD.barWidth, 6, 0x111722).setOrigin(0, 0).setStrokeStyle(1, 0x2a3548);
+    this.draftFill = this.add.rectangle(HUD.margin + 1, 0, 0, 4, 0xffe2a8).setOrigin(0, 0);
+    this.draftLabel = this.add.text(HUD.margin + HUD.barWidth + 8, 0, '', {
+      fontFamily: 'monospace', fontSize: '11px', color: '#ffe2a8',
+    });
 
     // --- Pause overlay ---
     this.pauseGroup = this.add.container(0, 0).setVisible(false).setDepth(1000);
@@ -105,9 +112,53 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5, 0.5);
     this.recapGroup.add([this.recapDim, this.recapTitle, this.recapBody, this.recapHelp]);
 
+    // --- Draft overlay ---
+    // Built once with empty card slots; refreshed in showDraft() each time.
+    this.draftGroup = this.add.container(0, 0).setVisible(false).setDepth(1100);
+    this.draftDim = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000, 0.7).setOrigin(0, 0);
+    this.draftTitle = this.add.text(0, 0, 'CHOOSE AN UPGRADE', {
+      fontFamily: 'monospace', fontSize: '24px', color: '#ffe2a8',
+    }).setOrigin(0.5, 0.5);
+    this.draftHelp = this.add.text(0, 0, 'click a card  or  press 1 / 2 / 3', {
+      fontFamily: 'monospace', fontSize: '13px', color: '#9aa6bd',
+    }).setOrigin(0.5, 0.5);
+    this.draftGroup.add([this.draftDim, this.draftTitle, this.draftHelp]);
+
+    // Build a fixed number of card slots; we'll mutate them in showDraft.
+    this.draftCards = [];
+    for (let i = 0; i < DRAFT.optionCount; i++) {
+      const card = this.add.container(0, 0).setVisible(false).setSize(220, 220);
+      const bg = this.add.rectangle(0, 0, 220, 220, 0x111722, 0.95).setStrokeStyle(2, 0x3a4868);
+      const ttl = this.add.text(0, -82, '', {
+        fontFamily: 'monospace', fontSize: '15px', color: '#ffe2a8',
+        align: 'center', wordWrap: { width: 200 },
+      }).setOrigin(0.5, 0);
+      const dsc = this.add.text(0, -10, '', {
+        fontFamily: 'monospace', fontSize: '12px', color: '#dfe6f2',
+        align: 'center', wordWrap: { width: 200 },
+      }).setOrigin(0.5, 0.5);
+      const idx = this.add.text(0, 76, '', {
+        fontFamily: 'monospace', fontSize: '14px', color: '#9adcff',
+      }).setOrigin(0.5, 0.5);
+      card.add([bg, ttl, dsc, idx]);
+      card.bg = bg; card.ttl = ttl; card.dsc = dsc; card.idx = idx;
+      // Click to pick.
+      bg.setInteractive({ useHandCursor: true });
+      bg.on('pointerover', () => bg.setStrokeStyle(2, 0xffd54a));
+      bg.on('pointerout',  () => bg.setStrokeStyle(2, 0x3a4868));
+      bg.on('pointerdown', () => this.pickDraft(i));
+      this.draftGroup.add(card);
+      this.draftCards.push(card);
+    }
+
     // --- Input ---
     this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     this.rKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+    this.draftKeys = [
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+    ];
 
     this.scale.on('resize', this.onResize, this);
     this.onResize({ width: this.scale.width, height: this.scale.height });
@@ -138,6 +189,26 @@ export class UIScene extends Phaser.Scene {
     this.recapTitle.setPosition(width / 2, height / 2 - 110);
     this.recapBody.setPosition(width / 2, height / 2 - 70);
     this.recapHelp.setPosition(width / 2, height / 2 + 130);
+
+    // Draft overlay layout (3 horizontal cards centered).
+    this.draftDim.setSize(width, height);
+    this.draftTitle.setPosition(width / 2, height / 2 - 200);
+    this.draftHelp.setPosition(width / 2, height / 2 + 170);
+    const gap = 30;
+    const cardW = 220;
+    const total = this.draftCards.length * cardW + (this.draftCards.length - 1) * gap;
+    let cx = width / 2 - total / 2 + cardW / 2;
+    for (const c of this.draftCards) {
+      c.setPosition(cx, height / 2);
+      cx += cardW + gap;
+    }
+
+    // Draft progress bar positioned right below the parts text.
+    const partsY = HUD.margin + COLOR_KEYS.length * (HUD.barHeight + 8) + 4;
+    const draftY = partsY + 18;
+    this.draftBg.setPosition(HUD.margin, draftY);
+    this.draftFill.setPosition(HUD.margin + 1, draftY + 1);
+    this.draftLabel.setPosition(HUD.margin + HUD.barWidth + 8, draftY - 2);
   }
 
   get gs() { return this.scene.get('GameScene'); }
@@ -168,6 +239,32 @@ export class UIScene extends Phaser.Scene {
     this.hpFill.setSize(238 * hpFrac, 10);
     this.hpText.setText(`HP ${Math.ceil(p.hp)} / ${p.maxHP}`);
 
+    // Draft progress bar.
+    this.updateDraftProgress(gs);
+
+    // Draft overlay takes priority over pause input.
+    if (gs.pendingDraft) {
+      if (!this.draftGroup.visible) this.showDraft(gs.pendingDraft);
+      for (let i = 0; i < this.draftKeys.length; i++) {
+        if (Phaser.Input.Keyboard.JustDown(this.draftKeys[i])) {
+          this.pickDraft(i);
+          break;
+        }
+      }
+      // Still allow R to restart even mid-draft (in case the player gets stuck).
+      if (Phaser.Input.Keyboard.JustDown(this.rKey)) {
+        this.draftGroup.setVisible(false);
+        for (const c of this.draftCards) c.setVisible(false);
+        this.pauseGroup.setVisible(false);
+        this.recapGroup.setVisible(false);
+        gs.restartGame();
+      }
+      return; // skip pause toggle while drafting
+    } else if (this.draftGroup.visible) {
+      this.draftGroup.setVisible(false);
+      for (const c of this.draftCards) c.setVisible(false);
+    }
+
     // Pause toggle
     if (Phaser.Input.Keyboard.JustDown(this.escKey) && p.hp > 0) {
       this.togglePause();
@@ -191,6 +288,43 @@ export class UIScene extends Phaser.Scene {
     } else if (!gs.deathPayload && this.recapGroup.visible) {
       this.recapGroup.setVisible(false);
     }
+  }
+
+  updateDraftProgress(gs) {
+    const ratio = Math.max(0, Math.min(1,
+      (gs.evolutionsSinceLastDraft ?? 0) / DRAFT.everyNEvolutions));
+    this.draftFill.setSize((HUD.barWidth - 2) * ratio, 4);
+    this.draftLabel.setText(
+      `draft ${Math.min(DRAFT.everyNEvolutions, gs.evolutionsSinceLastDraft ?? 0)}/${DRAFT.everyNEvolutions}` +
+      (gs.player ? `   picks ${gs.player.draftsTaken ?? 0}` : '')
+    );
+  }
+
+  showDraft(payload) {
+    const opts = payload.options || [];
+    for (let i = 0; i < this.draftCards.length; i++) {
+      const c = this.draftCards[i];
+      const opt = opts[i];
+      if (!opt) { c.setVisible(false); continue; }
+      c.setVisible(true);
+      c.ttl.setText(opt.title);
+      c.dsc.setText(opt.desc);
+      c.idx.setText(`[ ${i + 1} ]`);
+    }
+    this.draftGroup.setVisible(true);
+    // If a normal pause overlay was up, hide it - the draft is its own pause.
+    this.pauseGroup.setVisible(false);
+  }
+
+  pickDraft(i) {
+    const gs = this.gs;
+    if (!gs || !gs.pendingDraft) return;
+    const opt = gs.pendingDraft.options?.[i];
+    if (!opt) return;
+    gs.applyDraftChoice(opt);
+    // Hide immediately; update() will refresh visibility next tick.
+    this.draftGroup.setVisible(false);
+    for (const c of this.draftCards) c.setVisible(false);
   }
 
   updateBars(p) {

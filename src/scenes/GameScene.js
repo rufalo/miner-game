@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import {
   COLORS, COLOR_KEYS, WORLD, PLAYER, MINERAL, PICKUP, TIER,
   EVOLUTION, HYBRIDS, HYBRID_STATS, COMBO, DRAFT, BOSS, BIOME,
-  SHOCKWAVE, LANDMARK, RECIPE, UPGRADES,
+  SHOCKWAVE, LANDMARK, RECIPE, UPGRADES, STRUCTURES,
 } from '../config.js';
 import { RecipeSystem } from '../systems/RecipeSystem.js';
 import { installOrUpgrade } from '../systems/RecipeUpgrades.js';
@@ -369,6 +369,8 @@ export class GameScene extends Phaser.Scene {
     this.enemyMissiles = this.physics.add.group({ runChildUpdate: true });
     // World features: destructible static landmarks (pits etc).
     this.landmarks = this.physics.add.group({ runChildUpdate: true });
+    // Chain mutators (non-damageable); interaction is distance + cooldown in update.
+    this.chainStructures = this.physics.add.group({ runChildUpdate: false });
     this.fx = this.add.group();
 
     // Systems
@@ -678,6 +680,159 @@ export class GameScene extends Phaser.Scene {
       ? `${def.label || result.upgrade.toUpperCase()} ${labelTier}`
       : `${def.label || result.upgrade.toUpperCase()} -> ${labelTier}`;
     this.spawnGrowthFx?.(player.x, player.y, def.color || 0xffffff, text);
+  }
+
+  /**
+   * Remove a body part without volatile-tail detonation (used by chain structures).
+   */
+  silentRemoveBodyPart(part) {
+    const player = this.player;
+    if (!part || !player?.parts) return;
+    const idx = player.parts.indexOf(part);
+    if (idx < 0) return;
+    player.parts.splice(idx, 1);
+    if (part.kind === 'prism' && player) player.rainbowSpawned = false;
+    if (part.markGlow) { part.markGlow.destroy(); part.markGlow = null; }
+    part.destroy();
+    player.chainChanged();
+  }
+
+  /**
+   * Primary-color trail ingredients only (orbitals / hybrids skipped).
+   * @returns {{ p: import('../entities/BodyPart.js').BodyPart, i: number }[]}
+   */
+  trailPrimaryRows() {
+    return this.player.parts
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.followMode !== 'orbit' && COLOR_KEYS.includes(p.color))
+      .sort((a, b) => a.i - b.i);
+  }
+
+  /**
+   * Apply one structure effect. Returns true if the tail changed (cooldown only on success).
+   */
+  applyChainStructure(typeKey) {
+    const player = this.player;
+    const rows = this.trailPrimaryRows();
+    if (!rows.length) return false;
+
+    const maybeCombine = () => {
+      if (player.parts.length >= RECIPE.slots) this.combineRecipe();
+    };
+
+    switch (typeKey) {
+      case 'solar_conflux': {
+        let ok = false;
+        for (const { p } of rows) {
+          if (p.color === 'blue' && p.reassignPrimaryColor('yellow')) ok = true;
+        }
+        if (ok) player.chainChanged();
+        return ok;
+      }
+      case 'verdant_well': {
+        let ok = false;
+        for (const { p } of rows) {
+          if (p.color === 'yellow' && p.reassignPrimaryColor('green')) ok = true;
+        }
+        if (ok) player.chainChanged();
+        return ok;
+      }
+      case 'prism_spire': {
+        let ok = false;
+        for (const { p } of rows) {
+          const idx = COLOR_KEYS.indexOf(p.color);
+          if (idx < 0) continue;
+          const next = COLOR_KEYS[(idx + 1) % COLOR_KEYS.length];
+          if (p.reassignPrimaryColor(next)) ok = true;
+        }
+        if (ok) player.chainChanged();
+        return ok;
+      }
+      case 'ruby_cyan_gate': {
+        let ok = false;
+        for (const { p } of rows) {
+          if (p.color === 'red' && p.reassignPrimaryColor('blue')) ok = true;
+          else if (p.color === 'blue' && p.reassignPrimaryColor('red')) ok = true;
+        }
+        if (ok) player.chainChanged();
+        return ok;
+      }
+      case 'chaos_orb': {
+        const parts = rows.map(r => r.p);
+        const before = parts.map(p => p.color);
+        const shuffled = Phaser.Utils.Array.Shuffle([...before]);
+        const unchanged = shuffled.every((c, i) => c === before[i]);
+        if (unchanged) return false;
+        for (let i = 0; i < parts.length; i++) {
+          parts[i].reassignPrimaryColor(shuffled[i]);
+        }
+        player.chainChanged();
+        return true;
+      }
+      case 'core_forge': {
+        const pick = Phaser.Utils.Array.GetRandom(rows);
+        pick.p.upgradeValue(2);
+        player.chainChanged();
+        return true;
+      }
+      case 'fracture_anvil': {
+        if (rows.length < 2) return false;
+        const sorted = [...rows].sort((a, b) => a.p.value - b.p.value || a.i - b.i);
+        const a = sorted[0];
+        const b = sorted[1];
+        const idxA = player.parts.indexOf(a.p);
+        const idxB = player.parts.indexOf(b.p);
+        const survivor = idxA < idxB ? a.p : b.p;
+        const victim = idxA < idxB ? b.p : a.p;
+        const addV = victim.value;
+        this.silentRemoveBodyPart(victim);
+        survivor.upgradeValue(addV);
+        maybeCombine();
+        return true;
+      }
+      case 'twin_echo': {
+        const sorted = [...rows].sort((a, b) => a.p.value - b.p.value || a.i - b.i);
+        const w = sorted[0].p;
+        const trailLen = player.trailParts().length;
+        if (trailLen < player.maxTail()) {
+          const part = new BodyPart(this, player, player.parts.length, {
+            color: w.color,
+            value: w.value,
+          });
+          player.parts.push(part);
+          this.bodyParts.add(part);
+          player.chainChanged();
+          maybeCombine();
+        } else {
+          w.upgradeValue(1);
+          player.chainChanged();
+        }
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  tickChainStructures(time) {
+    const player = this.player;
+    const list = this.chainStructures?.getChildren?.() ?? [];
+    const pr = PLAYER.radius;
+    for (const s of list) {
+      if (!s?.active || !s.isChainStructure) continue;
+      const def = STRUCTURES.defs[s.structureKey];
+      const reach =
+        STRUCTURES.interactRange + s.displayWidth * 0.5 + pr;
+      const d = Phaser.Math.Distance.Between(player.x, player.y, s.x, s.y);
+      if (d > reach) continue;
+      if (time < (s.nextUseAt ?? 0)) continue;
+      if (this.applyChainStructure(s.structureKey)) {
+        s.nextUseAt = time + STRUCTURES.cooldownMs;
+        if (def) {
+          this.spawnGrowthFx(s.x, s.y, def.tint, def.label);
+        }
+      }
+    }
   }
 
   /**
@@ -1387,6 +1542,7 @@ export class GameScene extends Phaser.Scene {
     this.player.update(time, delta);
     this.hunterSpawner?.update(time);
     this.zoneSystem?.update(time, delta);
+    this.tickChainStructures(time);
 
     // Body parts follow trail
     const parts = this.player.parts;

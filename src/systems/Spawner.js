@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
-import { MINERAL, PICKUP, TIER, ENEMY, COLOR_KEYS, LANDMARK, NEUTRAL, PATROL } from '../config.js';
+import { MINERAL, PICKUP, TIER, ENEMY, COLOR_KEYS, LANDMARK, NEUTRAL, PATROL, STRUCTURES } from '../config.js';
 import { MineralDeposit } from '../entities/MineralDeposit.js';
 import { BodyPartPickup } from '../entities/BodyPartPickup.js';
 import { BossEnemy } from '../entities/enemies/BossEnemy.js';
 import { BoulderPit } from '../entities/world/BoulderPit.js';
 import { NeutralMiner } from '../entities/NeutralMiner.js';
 import { PatrollerEnemy } from '../entities/enemies/PatrollerEnemy.js';
+import { ChainStructure } from '../entities/world/ChainStructure.js';
 
 // Owns mineral/pickup/enemy zone seeding and respawn-elsewhere behavior.
 export class Spawner {
@@ -16,6 +17,7 @@ export class Spawner {
     this.bosses = []; // BossEnemy instances spawned at world seed
     this.landmarks = []; // BoulderPit instances
     this.neutrals = []; // NeutralMiner instances
+    this.chainStructures = []; // ChainStructure instances
   }
 
   /**
@@ -29,6 +31,50 @@ export class Spawner {
     this.seedLandmarks();
     this.seedNeutralMiners();
     this.seedPatrollers();
+    this.seedChainStructures();
+  }
+
+  /** Weighted random key from STRUCTURES.defs. */
+  pickChainStructureType() {
+    const pool = [];
+    for (const [key, def] of Object.entries(STRUCTURES.defs)) {
+      for (let i = 0; i < (def.weight || 1); i++) pool.push(key);
+    }
+    return Phaser.Utils.Array.GetRandom(pool);
+  }
+
+  /**
+   * Seed visitable chain mutators: a few inside the safe ring + one per
+   * outer tier. Each picks a random effect type (solar conflux, prism spire,
+   * etc.) so every run reads differently.
+   */
+  seedChainStructures() {
+    this.chainStructures = this.chainStructures || [];
+    const wc = this.scene.worldCenter;
+
+    const placeOne = (x, y) => {
+      const key = this.pickChainStructureType();
+      const def = STRUCTURES.defs[key];
+      if (!def) return;
+      const s = new ChainStructure(this.scene, x, y, key, def.label, def.tint);
+      this.scene.chainStructures.add(s);
+      this.chainStructures.push(s);
+    };
+
+    for (let i = 0; i < STRUCTURES.innerCount; i++) {
+      const p = this.randomInnerPoint(420);
+      placeOne(p.x, p.y);
+    }
+
+    for (let tier = 1; tier <= TIER.maxTier; tier++) {
+      const ringInner = TIER.safeRadius + (tier - 1) * TIER.ringWidth;
+      const ringOuter = TIER.safeRadius + tier * TIER.ringWidth;
+      for (let j = 0; j < STRUCTURES.perTier; j++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Phaser.Math.FloatBetween(ringInner + 120, ringOuter - 120);
+        placeOne(wc.x + Math.cos(a) * r, wc.y + Math.sin(a) * r);
+      }
+    }
   }
 
   /**

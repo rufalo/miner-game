@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import {
   BODY_PART, COLORS, BLUE, RED, PLAYER, KIND_BY_COLOR, HYBRID_STATS, COMBO,
-  OVERCHARGE, MARK, MARK_ABILITIES,
+  OVERCHARGE, MARK, MARK_ABILITIES, COLOR_KEYS,
 } from '../config.js';
 
 // Tint cycle for the PRISM orbital.
@@ -138,6 +138,25 @@ export class BodyPart extends Phaser.Physics.Arcade.Sprite {
   applySize() {
     const size = (BODY_PART.baseSize + this.value * BODY_PART.sizePerValue) * (this.sizeMult || 1);
     this.setDisplaySize(size, size);
+  }
+
+  /**
+   * Reassign this segment as a different PRIMARY ingredient (recipe tail).
+   * No-op for hybrid / non-primary `color`. Refreshes kind, tint, mark, HP.
+   */
+  reassignPrimaryColor(newColor) {
+    if (!COLOR_KEYS.includes(newColor)) return false;
+    if (!COLOR_KEYS.includes(this.color)) return false;
+    this.color = newColor;
+    this.kind = KIND_BY_COLOR[newColor];
+    this.tint = COLORS[newColor];
+    this.setTint(this.tint);
+    this.applySize();
+    this.maxHP = BODY_PART.hpBase + this.value * BODY_PART.hpPerValue;
+    this.hp = this.maxHP;
+    this.applyKindStats();
+    this.refreshMarkGlow();
+    return true;
   }
 
   /**

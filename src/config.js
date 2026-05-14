@@ -501,6 +501,41 @@ export const NEUTRAL = {
   },
 };
 
+/**
+ * CHAIN STRUCTURES — visitable world objects that reshape the ingredient tail.
+ * Stand inside and touch the structure; after `cooldownMs` you can use it
+ * again. Effects only apply to primary-color trail ingredients (red/green/
+ * blue/yellow); hybrid kinds are skipped.
+ *
+ * Types (see GameScene.applyChainStructure for behavior):
+ *   solar_conflux   — all blue -> yellow
+ *   verdant_well    — all yellow -> green
+ *   prism_spire     — every part steps one step in RGBY cycle
+ *   ruby_cyan_gate  — red <-> blue swap on each part
+ *   chaos_orb       — shuffle all part colors randomly
+ *   core_forge      — +2 value on one random part
+ *   fracture_anvil  — merge two lowest-value parts into one (sum values)
+ *   twin_echo       — duplicate weakest part if tail has room, else +1 value on weakest
+ */
+export const STRUCTURES = {
+  cooldownMs: 13000,
+  /** Extra reach beyond half display widths for "standing in" the structure. */
+  interactRange: 44,
+  innerCount: 2,               // seeded inside safe radius (near early play)
+  perTier: 1,                  // one random structure per outer tier ring
+  displaySize: 46,
+  defs: {
+    solar_conflux:  { weight: 3, tint: 0xffe066, label: 'SOLAR CONFLUX' },
+    verdant_well:   { weight: 2, tint: 0x5cff8a, label: 'VERDANT WELL' },
+    prism_spire:    { weight: 3, tint: 0xf0f4ff, label: 'PRISM SPIRE' },
+    ruby_cyan_gate: { weight: 2, tint: 0xff5ec7, label: 'RUBY/CYAN GATE' },
+    chaos_orb:      { weight: 2, tint: 0xc4a8ff, label: 'CHAOS ORB' },
+    core_forge:     { weight: 3, tint: 0xff8a44, label: 'CORE FORGE' },
+    fracture_anvil: { weight: 2, tint: 0x8a9aaa, label: 'FRACTURE ANVIL' },
+    twin_echo:      { weight: 2, tint: 0xa8dcff, label: 'TWIN ECHO' },
+  },
+};
+
 export const BODY_PART = {
   baseSize: 8,                    // px per side at value 0
   sizePerValue: 2,

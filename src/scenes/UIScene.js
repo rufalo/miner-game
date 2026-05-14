@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION, DRAFT, SHOCKWAVE, OVERCHARGE, RECIPE, UPGRADES } from '../config.js';
+import { COLOR_KEYS, COLORS, HUD, MINIMAP, PLAYER, TIER, WORLD, EVOLUTION, DRAFT, SHOCKWAVE, OVERCHARGE, RECIPE, UPGRADES, STRUCTURES } from '../config.js';
 import { RecipeSystem } from '../systems/RecipeSystem.js';
 
 const formatTime = (ms) => {
@@ -615,6 +615,18 @@ export class UIScene extends Phaser.Scene {
         g.fillStyle(0xff6a3a, 0.6);
         g.fillCircle(lx, ly, 1.5);
       }
+    }
+
+    // Chain structures (recipe tail mutators): small square by structure tint.
+    const structs = this.gs.chainStructures?.getChildren?.() ?? [];
+    for (const st of structs) {
+      if (!st.active) continue;
+      const def = STRUCTURES.defs[st.structureKey];
+      const tint = def?.tint ?? 0xffffff;
+      const sx = st.x * k;
+      const sy = st.y * k;
+      g.fillStyle(tint, 0.92);
+      g.fillRect(sx - 2, sy - 2, 4, 4);
     }
 
     // Bosses (large red diamonds, very visible).
